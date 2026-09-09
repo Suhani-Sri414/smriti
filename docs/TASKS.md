@@ -30,15 +30,20 @@ a new session for the next task.
       be meaningfully tested.
 
 ## Phase 3 — pairing (unblocks everything backend-facing)
-- [ ] **A07** Wire the existing login screen's QR button to `redeem-pairing-token` via
+- [x] **A07** Wire the existing login screen's QR button to `redeem-pairing-token` via
       `pairing_service.dart`. Add code-entry fallback using the exact alphabet from
       APP-BUILD-SPEC.md §7.
       AC: a real pairing token/code generated from the web app successfully
       authenticates the device and writes `patientId` etc. into `AppConfigs`.
-- [ ] **A08** Caregiver-login pairing path (`pair-device-authenticated`), with mandatory
+      Verified on physical hardware against the live backend.
+- [x] **A08** Caregiver-login pairing path (`pair-device-authenticated`), with mandatory
       `signOut()` before establishing the device session.
       AC: after pairing this way, `Supabase.instance.client.auth.currentUser` reflects
       the device identity, not the caregiver's.
+      Verified on physical hardware: device identity correct (synthetic device
+      address, not the caregiver's), `app_metadata.patient_id` matched, patient
+      list resolved from `patient_members`, and sign-out-on-cancel confirmed
+      when the flow is abandoned at the confirmation screen.
 
 ## Phase 4 — sync
 - [ ] **A09** `ContentPuller` + `MediaDownloader`. Media → verify → DB swap → reschedule.
