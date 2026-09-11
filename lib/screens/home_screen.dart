@@ -7,6 +7,7 @@ import '../app_colors.dart';
 import '../core/app_services.dart';
 import '../core/db/database.dart';
 import 'debug_sheet.dart';
+import 'call_confirmation_screen.dart';
 import 'games_menu_screen.dart';
 import 'my_people_screen.dart';
 
@@ -79,12 +80,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _onCallTapped(_HomeData data) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Calling ${data.primaryContactName}...'),
-        duration: const Duration(seconds: 2),
-        backgroundColor: AppColors.leafGreen,
+  Future<void> _onCallTapped(_HomeData data) async {
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CallConfirmationScreen(
+          services: widget.services,
+          contactName: data.primaryContactName,
+        ),
       ),
     );
   }
