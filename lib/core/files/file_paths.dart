@@ -4,7 +4,12 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 class FilePaths {
+  static String? documentsDirectoryOverride;
+
   static Future<String> _documentsDirectory() async {
+    if (documentsDirectoryOverride != null) {
+      return documentsDirectoryOverride!;
+    }
     final directory = await getApplicationDocumentsDirectory();
     return directory.path;
   }
@@ -12,8 +17,8 @@ class FilePaths {
   static Future<String> _ensureDirectory(String path) async {
     final directory = Directory(path);
 
-    if (!await directory.exists()) {
-      await directory.create(recursive: true);
+    if (!directory.existsSync()) {
+      directory.createSync(recursive: true);
     }
 
     return directory.path;

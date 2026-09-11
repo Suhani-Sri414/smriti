@@ -1,4 +1,6 @@
 import 'package:drift/drift.dart' show Value;
+// TEMPORARY DIAGNOSTIC import, for the [pull] logging below. Remove with it.
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../db/database.dart';
@@ -128,48 +130,121 @@ class ContentPuller {
   static const String patientIdKey = 'patientId';
 
   Future<PullResult> pull() async {
+    // TEMPORARY DIAGNOSTIC — whole body wrapped so a thrown pull is logged
+    // here. SyncEngine catches content failures into `lastSyncError` and
+    // carries on, so today a failed pull is completely silent.
+    try {
+      return await _pull();
+    } catch (error, stack) {
+      debugPrint('[pull] ===== pull() THREW =====');
+      debugPrint('[pull] runtimeType : ${error.runtimeType}');
+      debugPrint('[pull] toString    : $error');
+      debugPrint('[pull] stack:\n$stack');
+      debugPrint('[pull] ===== end =====');
+      rethrow;
+    }
+  }
+
+  Future<PullResult> _pull() async {
+    debugPrint('[pull] --- pull() start ---');
+
     final patientId = await configs.getValue(patientIdKey);
+    debugPrint('[pull] patientId: ${patientId ?? "(null)"}');
     if (patientId == null || patientId.isEmpty) {
+      debugPrint('[pull] SKIPPED: not paired');
       return PullResult.skipped('not paired');
     }
 
     // 1. Cheap version check.
     final remoteVersion =
         await gateway.fetchRemoteContentVersion(patientId);
+    final localVersion = await contentRepo.getContentVersion();
+    debugPrint('[pull] version probe: remote=${remoteVersion ?? "(null)"} '
+        'local=${localVersion ?? "(null)"} '
+        'isNewer=${remoteVersion == null ? "n/a" : _isNewer(remoteVersion, localVersion)}');
+
     if (remoteVersion == null || remoteVersion.isEmpty) {
+      debugPrint('[pull] SKIPPED: no remote content version');
       return PullResult.skipped('no remote content version');
     }
 
-    final localVersion = await contentRepo.getContentVersion();
     if (!_isNewer(remoteVersion, localVersion)) {
+      // If this prints while the home screen is empty, the local version was
+      // bumped without the rows landing, and every future pull short-circuits
+      // here forever.
+      final counts = await _localRowCounts();
+      debugPrint('[pull] UP-TO-DATE, nothing written. Local rows now: $counts');
       return PullResult.upToDate(remoteVersion);
     }
 
     // 2. Full payload.
+    debugPrint('[pull] calling get_patient_content RPC for $patientId …');
     final payload = await gateway.fetchContent(patientId);
+    debugPrint('[pull] RPC returned. keys=${payload.keys.toList()}');
+    debugPrint('[pull] raw payload: $payload');
+
     final parsed = ContentPayloadParser.parse(payload);
+    debugPrint('[pull] parsed: version=${parsed.version} '
+        'people=${parsed.people.length} '
+        'medications=${parsed.medications.length} '
+        'routineItems=${parsed.routineItems.length} '
+        'mediaRefs=${parsed.media.length}');
+    for (final ref in parsed.media) {
+      debugPrint('[pull]   media ref: $ref');
+    }
 
     // 3. Media first: download to tmp, verify, then move into place. Throws
     //    before anything is moved if a single file fails.
+    //
+    //    NOTE: this sits between the RPC and the Drift write, so a missing
+    //    storage object aborts the pull here — RPC succeeded, rows never
+    //    written, version never bumped.
+    debugPrint('[pull] staging ${parsed.media.length} media file(s) …');
     final staged = await mediaDownloader.stage(parsed.media);
+    debugPrint('[pull] staged ${staged.length} file(s) OK, committing …');
     await mediaDownloader.commit(staged);
+    debugPrint('[pull] media committed to disk');
 
     // 4. Atomic swap; contentVersion is bumped inside the same transaction, so
     //    it can never be ahead of the rows it describes. The payload's own
     //    `version` wins over the probe, which could be stale if content changed
     //    between the two calls.
     final appliedVersion = parsed.version ?? remoteVersion;
+    debugPrint('[pull] Drift transaction START '
+        '(writing ${parsed.people.length} people, '
+        '${parsed.medications.length} medications, '
+        '${parsed.routineItems.length} routine items, '
+        'version -> $appliedVersion)');
     await contentRepo.replaceContent(
       people: parsed.people,
       medications: parsed.medications,
       routineItems: parsed.routineItems,
       contentVersion: appliedVersion,
     );
+    debugPrint('[pull] Drift transaction DONE');
+
+    // Read back, so "wrote nothing" and "wrote and lost it" are separable.
+    debugPrint('[pull] read-back after swap: ${await _localRowCounts()}');
 
     // 5. Alarms last.
     await onContentChanged?.call();
+    debugPrint('[pull] --- pull() complete: updated to $appliedVersion ---');
 
     return PullResult.updated(appliedVersion);
+  }
+
+  /// TEMPORARY DIAGNOSTIC — what is actually in Drift right now.
+  Future<String> _localRowCounts() async {
+    try {
+      final people = await contentRepo.getPeople();
+      final medications = await contentRepo.getMedications(activeOnly: false);
+      final routine = await contentRepo.getRoutineItems();
+      return 'people=${people.length} medications=${medications.length} '
+          'routine=${routine.length} '
+          'contentVersion=${await contentRepo.getContentVersion() ?? "(null)"}';
+    } catch (e) {
+      return 'count failed: $e';
+    }
   }
 
   /// Versions are opaque strings; compare numerically when both parse as ints,
