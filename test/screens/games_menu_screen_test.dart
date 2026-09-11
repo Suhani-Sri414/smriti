@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smriti/core/app_services.dart';
 import 'package:smriti/core/db/database.dart';
 import 'package:smriti/games/market_basket/market_basket_screen.dart';
+import 'package:smriti/games/sort_the_harvest/sort_the_harvest_screen.dart';
 import 'package:smriti/screens/games_menu_screen.dart';
 
 import '../core/repo/_test_db.dart';
@@ -89,15 +90,27 @@ void main() {
     expect(find.byType(MarketBasketScreen), findsOneWidget);
   });
 
-  testWidgets('tapping unbuilt game card shows coming soon snackbar',
+  testWidgets('tapping Sort the Harvest opens SortTheHarvestScreen',
       (tester) async {
     final services = AppServices(database: db);
     await tester.pumpWidget(createSubject(services: services));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('game_card_sort_harvest')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SortTheHarvestScreen), findsOneWidget);
+  });
+
+  testWidgets('tapping unbuilt game card shows coming soon snackbar',
+      (tester) async {
+    final services = AppServices(database: db);
+    await tester.pumpWidget(createSubject(services: services));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('game_card_faces')));
     await tester.pump();
 
-    expect(find.text('Sort the Harvest will be ready soon!'), findsOneWidget);
+    expect(find.text('Faces of My Family will be ready soon!'), findsOneWidget);
   });
 }

@@ -9,6 +9,9 @@ enum PhraseKey {
   sessionStart,
   sessionEnd,
   marketBasketIntro,
+  sortTheHarvestIntro,
+  facesIntro,
+  soundsIntro,
   tryAnother,
   wellDone,
 }

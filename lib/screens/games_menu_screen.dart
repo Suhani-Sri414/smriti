@@ -5,6 +5,7 @@ import '../core/app_services.dart';
 import '../core/sync/sync_engine.dart';
 import '../games/game_content_loader.dart';
 import '../games/market_basket/market_basket_screen.dart';
+import '../games/sort_the_harvest/sort_the_harvest_screen.dart';
 
 /// Screen 02: Games Menu.
 ///
@@ -25,6 +26,20 @@ class GamesMenuScreen extends StatelessWidget {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MarketBasketScreen(
+          services: services,
+          content: content,
+        ),
+      ),
+    );
+    await services.syncEngine.run(trigger: SyncTrigger.sessionEnd);
+  }
+
+  Future<void> _playSortTheHarvest(BuildContext context) async {
+    final content = await loadMockGameContent();
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SortTheHarvestScreen(
           services: services,
           content: content,
         ),
@@ -147,8 +162,7 @@ class GamesMenuScreen extends StatelessWidget {
                               title: 'Sort the Harvest',
                               subtitle: 'Sort into the right tray',
                               color: AppColors.leafGreen,
-                              onTap: () => _showComingSoon(
-                                  context, 'Sort the Harvest', AppColors.leafGreen),
+                              onTap: () => _playSortTheHarvest(context),
                               iconWidget: const Icon(
                                 Icons.grid_view_rounded,
                                 size: 56,
