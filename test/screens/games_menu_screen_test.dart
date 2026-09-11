@@ -5,6 +5,7 @@ import 'package:smriti/core/db/database.dart';
 import 'package:smriti/games/faces_of_my_family/faces_of_my_family_screen.dart';
 import 'package:smriti/games/market_basket/market_basket_screen.dart';
 import 'package:smriti/games/sort_the_harvest/sort_the_harvest_screen.dart';
+import 'package:smriti/games/sounds_of_home/sounds_of_home_screen.dart';
 import 'package:smriti/screens/games_menu_screen.dart';
 
 import '../core/repo/_test_db.dart';
@@ -115,15 +116,15 @@ void main() {
     expect(find.byType(FacesOfMyFamilyScreen), findsOneWidget);
   });
 
-  testWidgets('tapping unbuilt game card shows coming soon snackbar',
+  testWidgets('tapping Sounds of Home opens SoundsOfHomeScreen',
       (tester) async {
     final services = AppServices(database: db);
     await tester.pumpWidget(createSubject(services: services));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('game_card_sounds')));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(find.text('Sounds of Home will be ready soon!'), findsOneWidget);
+    expect(find.byType(SoundsOfHomeScreen), findsOneWidget);
   });
 }

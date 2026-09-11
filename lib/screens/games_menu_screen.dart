@@ -7,6 +7,7 @@ import '../games/faces_of_my_family/faces_of_my_family_screen.dart';
 import '../games/game_content_loader.dart';
 import '../games/market_basket/market_basket_screen.dart';
 import '../games/sort_the_harvest/sort_the_harvest_screen.dart';
+import '../games/sounds_of_home/sounds_of_home_screen.dart';
 
 /// Screen 02: Games Menu.
 ///
@@ -63,14 +64,18 @@ class GamesMenuScreen extends StatelessWidget {
     await services.syncEngine.run(trigger: SyncTrigger.sessionEnd);
   }
 
-  void _showComingSoon(BuildContext context, String gameName, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$gameName will be ready soon!'),
-        duration: const Duration(seconds: 2),
-        backgroundColor: color,
+  Future<void> _playSoundsOfHome(BuildContext context) async {
+    final content = await loadMockGameContent();
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SoundsOfHomeScreen(
+          services: services,
+          content: content,
+        ),
       ),
     );
+    await services.syncEngine.run(trigger: SyncTrigger.sessionEnd);
   }
 
   String _formatCurrentTime() {
@@ -224,8 +229,7 @@ class GamesMenuScreen extends StatelessWidget {
                               title: 'Sounds of Home',
                               subtitle: 'Listen and identify sounds',
                               color: AppColors.marigold,
-                              onTap: () => _showComingSoon(
-                                  context, 'Sounds of Home', AppColors.marigold),
+                              onTap: () => _playSoundsOfHome(context),
                               iconWidget: const Icon(
                                 Icons.volume_up_rounded,
                                 size: 56,
