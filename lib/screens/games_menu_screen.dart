@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_colors.dart';
 import '../core/app_services.dart';
 import '../core/sync/sync_engine.dart';
+import '../games/faces_of_my_family/faces_of_my_family_screen.dart';
 import '../games/game_content_loader.dart';
 import '../games/market_basket/market_basket_screen.dart';
 import '../games/sort_the_harvest/sort_the_harvest_screen.dart';
@@ -40,6 +41,20 @@ class GamesMenuScreen extends StatelessWidget {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SortTheHarvestScreen(
+          services: services,
+          content: content,
+        ),
+      ),
+    );
+    await services.syncEngine.run(trigger: SyncTrigger.sessionEnd);
+  }
+
+  Future<void> _playFacesOfMyFamily(BuildContext context) async {
+    final content = await loadMockGameContent();
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FacesOfMyFamilyScreen(
           services: services,
           content: content,
         ),
@@ -185,8 +200,7 @@ class GamesMenuScreen extends StatelessWidget {
                               title: 'Faces of My Family',
                               subtitle: 'Recognize family members',
                               color: AppColors.indigo,
-                              onTap: () => _showComingSoon(
-                                  context, 'Faces of My Family', AppColors.indigo),
+                              onTap: () => _playFacesOfMyFamily(context),
                               iconWidget: Container(
                                 width: 72,
                                 height: 72,
