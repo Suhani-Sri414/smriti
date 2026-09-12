@@ -8,22 +8,22 @@ a new session for the next task.
 - [x] **A02** File path service — verified correct
 
 ## Phase 1 — fix and unblock
-- [ ] **A03** Fix `AbilityEstimator` per APP-BUILD-SPEC.md §3.
+- [x] **A03** Fix `AbilityEstimator` per APP-BUILD-SPEC.md §3.
       AC: `seed()`, `update()`, `nextDifficulty()` all present, θ clamp in place,
       RT tracking present, convergence test passes (`flutter test`).
-- [ ] **A04** Delete counter-app boilerplate from `main.dart`. Add `supabase_flutter` to
+- [x] **A04** Delete counter-app boilerplate from `main.dart`. Add `supabase_flutter` to
       `pubspec.yaml`, call `Supabase.initialize()` before `runApp()`.
       AC: app still builds and shows the login screen, no boilerplate remains.
 
 ## Phase 2 — local-only, no backend needed
-- [ ] **A05** Repositories: `content_repo.dart`, `event_repo.dart`, `ability_repo.dart`,
+- [x] **A05** Repositories: `content_repo.dart`, `event_repo.dart`, `ability_repo.dart`,
       `memo_repo.dart` in `lib/core/repo/`. Read/write Drift only.
       AC: unit test proving a round-trip write+read for each repo.
-- [ ] **A06** Session runner + `CognitiveGame` interface + ghost-hand widget +
+- [x] **A06** Session runner + `CognitiveGame` interface + ghost-hand widget +
       one game (Market Basket) built end to end against a mock content JSON.
       AC: playing the game locally writes a fully-populated `TrialEvents` row
       (every column from §5 non-null where required) and updates `AbilityStates`.
-- [ ] **A06b** Post-pairing navigation: home screen with entry point into
+- [x] **A06b** Post-pairing navigation: home screen with entry point into
       a playable game session (using the A06 harness), so sessions can
       actually be triggered and synced through real UI rather than tests
       only. Should exist before A11's reminder-to-screen return path can
@@ -46,18 +46,18 @@ a new session for the next task.
       when the flow is abandoned at the confirmation screen.
 
 ## Phase 4 — sync
-- [ ] **A09** `ContentPuller` + `MediaDownloader`. Media → verify → DB swap → reschedule.
+- [x] **A09** `ContentPuller` + `MediaDownloader`. Media → verify → DB swap → reschedule.
       AC: pulling content for a real patient populates `People`/`Medications`/
       `RoutineItems` and downloads their photos/voice to disk.
-- [ ] **A10** `EventPusher`, `MemoUploader`, `EscalationWriter`, heartbeat.
+- [x] **A10** `EventPusher`, `MemoUploader`, `EscalationWriter`, heartbeat.
       AC: playing a session while online results in rows appearing in Supabase's
       `events`/`sessions` tables with matching IDs. No `.select()` used anywhere in
       this code (verify by grep).
-- [ ] **A10b** Wire connectivity_plus into SyncEngine's hasConnection
+- [x] **A10b** Wire connectivity_plus into SyncEngine's hasConnection
       callback, replacing the injected stub. Depends on A10.
 
 ## Phase 4.5 — navigation shell (unblocks observing any of the above)
-- [ ] **A10.5** Minimal app shell, so pairing leads somewhere and A11 has a
+- [x] **A10.5** Minimal app shell, so pairing leads somewhere and A11 has a
       target to return the elder to. Deliberately ugly — bare functional
       widgets only.
       1. Startup gate in `main.dart`: paired → home, unpaired → login.
@@ -93,7 +93,7 @@ a new session for the next task.
       after the health check completes.
 
 ## Phase 6 — remaining
-- [ ] **A13** Remaining games on the harness from A06.
+- [x] **A13** Remaining games on the harness from A06.
 - [x] **A14** Diagnostics screen behind kiosk PIN.
 - [x] **A15** Kiosk mode lockdown on the main activity.
 - [x] **A16** Voice output (pre-recorded phrase playback) + constrained voice input for
