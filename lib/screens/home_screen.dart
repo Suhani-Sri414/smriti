@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 import '../app_colors.dart';
 import '../core/app_services.dart';
 import '../core/db/database.dart';
+import '../core/voice/voice_commander.dart';
 import 'debug_sheet.dart';
 import 'call_confirmation_screen.dart';
 import 'games_menu_screen.dart';
 import 'my_people_screen.dart';
 import 'today_screen.dart';
+import 'voice_interaction_overlay.dart';
 
 /// Screen 01: The Elder Home Screen.
 ///
@@ -19,9 +21,14 @@ import 'today_screen.dart';
 /// Today, Call Contact) with a central microphone button. No white, no red,
 /// no error state, no connectivity/sync indicators visible to the elder.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.services});
+  const HomeScreen({
+    super.key,
+    required this.services,
+    this.voiceCommander,
+  });
 
   final AppServices services;
+  final VoiceCommander? voiceCommander;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -29,6 +36,58 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final Future<_HomeData> _data = _load();
+  MicOverlayState _micState = MicOverlayState.idle;
+  late final VoiceCommander _voiceCommander =
+      widget.voiceCommander ?? FakeVoiceCommander();
+
+  @override
+  void dispose() {
+    _voiceCommander.stopListening();
+    super.dispose();
+  }
+
+  void _startListening() {
+    setState(() => _micState = MicOverlayState.listening);
+    _voiceCommander.startListening(
+      onResult: (command) {
+        if (!mounted) return;
+        if (command != null) {
+          setState(() => _micState = MicOverlayState.idle);
+          _handleVoiceCommand(command);
+        } else {
+          // No command matched or silence timeout -> Screen 16
+          setState(() => _micState = MicOverlayState.noMatch);
+        }
+      },
+    );
+  }
+
+  void _dismissVoiceOverlay() {
+    _voiceCommander.stopListening();
+    if (mounted) {
+      setState(() => _micState = MicOverlayState.idle);
+    }
+  }
+
+  void _handleVoiceCommand(VoiceCommand command) {
+    _data.then((data) {
+      if (!mounted) return;
+      switch (command) {
+        case VoiceCommand.play:
+          _openGamesMenu();
+          break;
+        case VoiceCommand.today:
+          _onTodayTapped(data);
+          break;
+        case VoiceCommand.people:
+          _onMyPeopleTapped(data);
+          break;
+        case VoiceCommand.call:
+          _onCallTapped(data);
+          break;
+      }
+    });
+  }
 
   Future<_HomeData> _load() async {
     final services = widget.services;
@@ -95,13 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onMicTapped() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Listening...'),
-        duration: Duration(seconds: 2),
-        backgroundColor: AppColors.terracotta,
-      ),
-    );
+    _startListening();
   }
 
   String _formatGreeting() {
@@ -135,107 +188,121 @@ class _HomeScreenState extends State<HomeScreen> {
             final name =
                 data.elderName.isEmpty ? 'Ibemhal' : data.elderName;
 
-            return Column(
+            return Stack(
               children: [
-                // TOP BAR: Greeting & Time
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 14, 28, 6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      GestureDetector(
-                        onLongPress: _openDebugSheet,
-                        behavior: HitTestBehavior.opaque,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                Column(
+                  children: [
+                    // TOP BAR: Greeting & Time
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 14, 28, 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          GestureDetector(
+                            onLongPress: _openDebugSheet,
+                            behavior: HitTestBehavior.opaque,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  _formatGreeting(),
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.primaryText,
-                                    fontFamily: 'Noto Sans',
-                                  ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _formatGreeting(),
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.primaryText,
+                                        fontFamily: 'Noto Sans',
+                                      ),
+                                    ),
+                                    Text(
+                                      name,
+                                      key: const Key('home_title'),
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primaryText,
+                                        fontFamily: 'Noto Sans',
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 Text(
-                                  name,
-                                  key: const Key('home_title'),
+                                  'content v${data.contentVersion ?? '-'} · ${data.people.length} people',
+                                  key: const Key('home_content_version'),
                                   style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primaryText,
+                                    fontSize: 11,
+                                    color: AppColors.secondaryText,
                                     fontFamily: 'Noto Sans',
                                   ),
                                 ),
                               ],
                             ),
-                            Text(
-                              'content v${data.contentVersion ?? '-'} · ${data.people.length} people',
-                              key: const Key('home_content_version'),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.secondaryText,
-                                fontFamily: 'Noto Sans',
-                              ),
+                          ),
+                          Text(
+                            _formatCurrentTime(),
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primaryText,
+                              fontFamily: 'Noto Sans',
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        _formatCurrentTime(),
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primaryText,
-                          fontFamily: 'Noto Sans',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
 
-                // 4 CARDS: 2x2 Balanced Grid
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(28, 6, 28, 14),
-                    child: Row(
-                      children: [
-                        // Left Column: Play & Today
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Expanded(child: _buildPlayCard()),
-                              const SizedBox(height: 18),
-                              Expanded(child: _buildTodayCard(data)),
-                            ],
+                    // 4 CARDS: 2x2 Balanced Grid
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(28, 6, 28, 14),
+                        child: Row(
+                          children: [
+                            // Left Column: Play & Today
+                            Expanded(
+                              child: Column(
+                              children: [
+                                Expanded(child: _buildPlayCard()),
+                                const SizedBox(height: 18),
+                                Expanded(child: _buildTodayCard(data)),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 18),
-                        // Right Column: My People & Call
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Expanded(child: _buildMyPeopleCard(data)),
-                              const SizedBox(height: 18),
-                              Expanded(child: _buildCallCard(data)),
-                            ],
+                          const SizedBox(width: 18),
+                          // Right Column: My People & Call
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Expanded(child: _buildMyPeopleCard(data)),
+                                const SizedBox(height: 18),
+                                Expanded(child: _buildCallCard(data)),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
 
-                // BOTTOM BAR: Ground strip with overlapping center microphone
-                _buildBottomBar(),
-              ],
-            );
+                  // BOTTOM BAR: Ground strip with overlapping center microphone
+                  _buildBottomBar(),
+                ],
+              ),
+              VoiceInteractionOverlay(
+                state: _micState,
+                contactName: data.primaryContactName,
+                onDismiss: _dismissVoiceOverlay,
+                onCommand: (command) {
+                  setState(() => _micState = MicOverlayState.idle);
+                  _handleVoiceCommand(command);
+                },
+                onRetry: _startListening,
+              ),
+            ],
+          );
           },
         ),
       ),
@@ -544,6 +611,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned(
             top: -12,
             child: GestureDetector(
+              key: const Key('home_mic_button'),
               onTap: _onMicTapped,
               child: Container(
                 width: 66,
