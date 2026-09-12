@@ -8,6 +8,7 @@ import '../games/game_content_loader.dart';
 import '../games/market_basket/market_basket_screen.dart';
 import '../games/sort_the_harvest/sort_the_harvest_screen.dart';
 import '../games/sounds_of_home/sounds_of_home_screen.dart';
+import 'ghost_demo_screen.dart';
 
 /// Screen 02: Games Menu.
 ///
@@ -18,19 +19,31 @@ import '../games/sounds_of_home/sounds_of_home_screen.dart';
 /// 3. Sort the Harvest (Executive function / set-shifting)
 /// 4. Sounds of Home (Auditory attention & recognition)
 class GamesMenuScreen extends StatelessWidget {
-  const GamesMenuScreen({super.key, required this.services});
+  const GamesMenuScreen({
+    super.key,
+    required this.services,
+    this.showGhostDemo = false,
+  });
 
   final AppServices services;
+  final bool showGhostDemo;
 
   Future<void> _playMarketBasket(BuildContext context) async {
     final content = await loadMockGameContent();
     if (!context.mounted) return;
+    final Widget targetScreen = showGhostDemo
+        ? GhostDemoScreen(
+            services: services,
+            gameId: 'market_basket',
+            content: content,
+          )
+        : MarketBasketScreen(
+            services: services,
+            content: content,
+          );
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => MarketBasketScreen(
-          services: services,
-          content: content,
-        ),
+        builder: (_) => targetScreen,
       ),
     );
     await services.syncEngine.run(trigger: SyncTrigger.sessionEnd);
@@ -39,12 +52,19 @@ class GamesMenuScreen extends StatelessWidget {
   Future<void> _playSortTheHarvest(BuildContext context) async {
     final content = await loadMockGameContent();
     if (!context.mounted) return;
+    final Widget targetScreen = showGhostDemo
+        ? GhostDemoScreen(
+            services: services,
+            gameId: 'sort_the_harvest',
+            content: content,
+          )
+        : SortTheHarvestScreen(
+            services: services,
+            content: content,
+          );
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => SortTheHarvestScreen(
-          services: services,
-          content: content,
-        ),
+        builder: (_) => targetScreen,
       ),
     );
     await services.syncEngine.run(trigger: SyncTrigger.sessionEnd);
@@ -53,12 +73,19 @@ class GamesMenuScreen extends StatelessWidget {
   Future<void> _playFacesOfMyFamily(BuildContext context) async {
     final content = await loadMockGameContent();
     if (!context.mounted) return;
+    final Widget targetScreen = showGhostDemo
+        ? GhostDemoScreen(
+            services: services,
+            gameId: 'faces_of_my_family',
+            content: content,
+          )
+        : FacesOfMyFamilyScreen(
+            services: services,
+            content: content,
+          );
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => FacesOfMyFamilyScreen(
-          services: services,
-          content: content,
-        ),
+        builder: (_) => targetScreen,
       ),
     );
     await services.syncEngine.run(trigger: SyncTrigger.sessionEnd);
@@ -67,12 +94,19 @@ class GamesMenuScreen extends StatelessWidget {
   Future<void> _playSoundsOfHome(BuildContext context) async {
     final content = await loadMockGameContent();
     if (!context.mounted) return;
+    final Widget targetScreen = showGhostDemo
+        ? GhostDemoScreen(
+            services: services,
+            gameId: 'sounds_of_home',
+            content: content,
+          )
+        : SoundsOfHomeScreen(
+            services: services,
+            content: content,
+          );
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => SoundsOfHomeScreen(
-          services: services,
-          content: content,
-        ),
+        builder: (_) => targetScreen,
       ),
     );
     await services.syncEngine.run(trigger: SyncTrigger.sessionEnd);
