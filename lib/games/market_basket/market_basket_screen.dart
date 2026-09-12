@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_colors.dart';
 import '../../core/app_services.dart';
+import '../../screens/session_end_screen.dart';
 import '../cognitive_game.dart';
 import '../session_runner.dart';
 import 'market_basket_game.dart';
@@ -75,7 +76,16 @@ class _MarketBasketScreenState extends State<MarketBasketScreen> {
     if (item == null) {
       // Six-minute cap spent or session completed.
       await _runner.end(completed: true);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => SessionEndScreen(
+              services: widget.services,
+              gameTitle: 'Market Basket',
+            ),
+          ),
+        );
+      }
       return;
     }
 

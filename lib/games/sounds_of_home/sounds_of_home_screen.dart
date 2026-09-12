@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_colors.dart';
 import '../../core/app_services.dart';
+import '../../screens/session_end_screen.dart';
 import '../cognitive_game.dart';
 import '../session_runner.dart';
 import 'sounds_of_home_game.dart';
@@ -73,7 +74,16 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
 
     if (item == null) {
       await _runner.end(completed: true);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => SessionEndScreen(
+              services: widget.services,
+              gameTitle: 'Sounds of Home',
+            ),
+          ),
+        );
+      }
       return;
     }
 
