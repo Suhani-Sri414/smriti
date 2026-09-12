@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final Future<_HomeData> _data = _load();
   MicOverlayState _micState = MicOverlayState.idle;
   late final VoiceCommander _voiceCommander =
-      widget.voiceCommander ?? FakeVoiceCommander();
+      widget.voiceCommander ?? widget.services.voiceCommander;
 
   @override
   void initState() {

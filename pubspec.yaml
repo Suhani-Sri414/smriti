@@ -49,6 +49,7 @@ dependencies:
   android_intent_plus: ^4.0.3
   wakelock_plus: ^1.2.0
   kiosk_mode: ^0.7.0+1
+  speech_to_text: ^6.6.0
 
 dev_dependencies:
   flutter_test:

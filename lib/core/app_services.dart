@@ -19,6 +19,8 @@ import 'sync/memo_uploader.dart';
 import 'sync/sync_engine.dart';
 import 'kiosk/kiosk_service.dart';
 import 'reminders/notifications.dart';
+import 'voice/phrase_player.dart';
+import 'voice/voice_commander.dart';
 
 /// Builds the object graph the app runs on.
 ///
@@ -33,6 +35,8 @@ class AppServices {
     ReminderNotifier? notifier,
     PairingService? pairingService,
     KioskHandler? kioskHandler,
+    PhrasePlayer? phrasePlayer,
+    VoiceCommander? voiceCommander,
   }) : db = database ?? appDatabase {
     contentRepo = ContentRepo(db);
     eventRepo = EventRepo(db);
@@ -50,6 +54,9 @@ class AppServices {
       configs: db.appConfigsDao,
       handler: kioskHandler,
     );
+
+    this.phrasePlayer = phrasePlayer ?? DiskAndAssetPhrasePlayer();
+    this.voiceCommander = voiceCommander ?? SpeechToTextVoiceCommander();
 
     contentPuller = ContentPuller(
       configs: db.appConfigsDao,
@@ -90,6 +97,8 @@ class AppServices {
   late final ContentPuller contentPuller;
   late final SyncEngine syncEngine;
   late final KioskService kioskService;
+  late final PhrasePlayer phrasePlayer;
+  late final VoiceCommander voiceCommander;
 
   static const String patientIdKey = 'patientId';
 

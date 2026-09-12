@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 /// Navigation and high-level commands recognizable from Home.
 enum VoiceCommand {
@@ -143,3 +144,172 @@ class FakeVoiceCommander implements VoiceCommander {
     _onResult = null;
   }
 }
+
+/// Abstract speech-to-text service client interface for testing and platform delegation.
+abstract class SpeechClient {
+  Future<bool> initialize({
+    void Function(String error)? onError,
+    void Function(String status)? onStatus,
+  });
+
+  Future<void> listen({
+    required void Function(String recognizedWords, bool isFinal) onResult,
+    Duration? listenFor,
+    Duration? pauseFor,
+    String? localeId,
+  });
+
+  Future<void> stop();
+}
+
+/// Production implementation backed by `package:speech_to_text`.
+class RealSpeechClient implements SpeechClient {
+  RealSpeechClient({stt.SpeechToText? speech})
+      : _speech = speech ?? stt.SpeechToText();
+
+  final stt.SpeechToText _speech;
+
+  @override
+  Future<bool> initialize({
+    void Function(String error)? onError,
+    void Function(String status)? onStatus,
+  }) async {
+    return _speech.initialize(
+      onError: onError != null ? (e) => onError(e.errorMsg) : null,
+      onStatus: onStatus != null ? (s) => onStatus(s) : null,
+    );
+  }
+
+  @override
+  Future<void> listen({
+    required void Function(String recognizedWords, bool isFinal) onResult,
+    Duration? listenFor,
+    Duration? pauseFor,
+    String? localeId,
+  }) async {
+    await _speech.listen(
+      onResult: (result) =>
+          onResult(result.recognizedWords, result.finalResult),
+      listenFor: listenFor,
+      pauseFor: pauseFor,
+      localeId: localeId,
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        cancelOnError: true,
+      ),
+    );
+  }
+
+  @override
+  Future<void> stop() => _speech.stop();
+}
+
+/// Hardware speech recognition commander backed by `package:speech_to_text`.
+class SpeechToTextVoiceCommander implements VoiceCommander {
+  SpeechToTextVoiceCommander({
+    SpeechClient? speechClient,
+    this.localeId,
+  }) : _speech = speechClient ?? RealSpeechClient();
+
+  final SpeechClient _speech;
+  final String? localeId;
+
+  bool _initialized = false;
+  bool _isListening = false;
+  ValueChanged<VoiceCommand?>? _onResult;
+  Timer? _fallbackTimer;
+
+  @override
+  bool get isListening => _isListening;
+
+  /// Initializes speech recognition engine with system speech services.
+  Future<bool> initialize() async {
+    if (_initialized) return true;
+    try {
+      _initialized = await _speech.initialize(
+        onError: (_) {
+          _finishListening(null);
+        },
+        onStatus: (status) {
+          if (status == 'notListening' || status == 'done') {
+            if (_isListening) {
+              _finishListening(null);
+            }
+          }
+        },
+      );
+      return _initialized;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> startListening({
+    required ValueChanged<VoiceCommand?> onResult,
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    _onResult = onResult;
+    _fallbackTimer?.cancel();
+
+    final available = await initialize();
+    if (!available) {
+      // Speech service unavailable or mic permission denied -> zero elder errors
+      _finishListening(null);
+      return;
+    }
+
+    _isListening = true;
+
+    // Safety fallback timer so recognition never hangs
+    _fallbackTimer = Timer(timeout + const Duration(milliseconds: 500), () {
+      if (_isListening) {
+        _finishListening(null);
+      }
+    });
+
+    try {
+      await _speech.listen(
+        onResult: (words, isFinal) {
+          final command = VoiceCommander.parseText(words);
+          if (command != null) {
+            _finishListening(command);
+          } else if (isFinal) {
+            _finishListening(null);
+          }
+        },
+        listenFor: timeout,
+        pauseFor: const Duration(seconds: 2),
+        localeId: localeId,
+      );
+    } catch (_) {
+      _finishListening(null);
+    }
+  }
+
+  void _finishListening(VoiceCommand? command) {
+    if (!_isListening && _onResult == null) return;
+    _isListening = false;
+    _fallbackTimer?.cancel();
+    _fallbackTimer = null;
+    final callback = _onResult;
+    _onResult = null;
+    try {
+      _speech.stop();
+    } catch (_) {}
+    callback?.call(command);
+  }
+
+  @override
+  Future<void> stopListening() async {
+    _isListening = false;
+    _fallbackTimer?.cancel();
+    _fallbackTimer = null;
+    _onResult = null;
+    try {
+      await _speech.stop();
+    } catch (_) {}
+  }
+}
+
+

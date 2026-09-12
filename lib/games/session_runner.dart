@@ -9,6 +9,7 @@ import '../core/ability/estimator.dart';
 import '../core/db/database.dart';
 import '../core/repo/ability_repo.dart';
 import '../core/repo/event_repo.dart';
+import '../core/voice/phrase_player.dart';
 import 'cognitive_game.dart';
 
 /// Tone of the cue shown or played after a trial.
@@ -36,6 +37,7 @@ class SessionRunner {
     required this.eventRepo,
     required this.abilityRepo,
     required this.content,
+    this.phrasePlayer,
     Uuid? uuid,
     DateTime Function()? now,
     this.sessionCap = const Duration(minutes: 6),
@@ -46,6 +48,7 @@ class SessionRunner {
   final EventRepo eventRepo;
   final AbilityRepo abilityRepo;
   final GameContent content;
+  final PhrasePlayer? phrasePlayer;
   final Duration sessionCap;
   final int maxHintLevel;
 
@@ -104,6 +107,9 @@ class SessionRunner {
 
     _sessionId = id;
     _startedAt = startedAt;
+
+    unawaited(
+        phrasePlayer?.playPhrase(PhraseKey.sessionStart) ?? Future.value());
 
     for (final game in games) {
       _subscriptions.add(
@@ -212,6 +218,10 @@ class SessionRunner {
               phrase: PhraseKey.tryAnother,
             ),
     );
+    unawaited(phrasePlayer?.playPhrase(result.correct
+            ? PhraseKey.wellDone
+            : PhraseKey.tryAnother) ??
+        Future.value());
   }
 
   /// Closes the session. [completed] is false when the elder walked away.
@@ -222,6 +232,8 @@ class SessionRunner {
     _ended = true;
     final endedAt = _now();
     final ranFullLength = completed ?? isCapReached;
+
+    unawaited(phrasePlayer?.playPhrase(PhraseKey.sessionEnd) ?? Future.value());
 
     await eventRepo.endSession(
       id: id,
