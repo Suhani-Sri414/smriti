@@ -464,6 +464,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.4.16"
+  kiosk_mode:
+    dependency: "direct main"
+    description:
+      name: kiosk_mode
+      sha256: "3606e0fa335309ac8c8daf799bbfdf5037cf7c44acc3588af82f8a59375e9293"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.0+1"
   leak_tracker:
     dependency: transitive
     description:

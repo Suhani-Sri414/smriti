@@ -48,6 +48,7 @@ dependencies:
   device_info_plus: ^9.1.2
   android_intent_plus: ^4.0.3
   wakelock_plus: ^1.2.0
+  kiosk_mode: ^0.7.0+1
 
 dev_dependencies:
   flutter_test:

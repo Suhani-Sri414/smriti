@@ -17,6 +17,7 @@ import 'sync/heartbeat.dart';
 import 'sync/media_downloader.dart';
 import 'sync/memo_uploader.dart';
 import 'sync/sync_engine.dart';
+import 'kiosk/kiosk_service.dart';
 import 'reminders/notifications.dart';
 
 /// Builds the object graph the app runs on.
@@ -31,6 +32,7 @@ class AppServices {
     AlarmScheduler? alarmScheduler,
     ReminderNotifier? notifier,
     PairingService? pairingService,
+    KioskHandler? kioskHandler,
   }) : db = database ?? appDatabase {
     contentRepo = ContentRepo(db);
     eventRepo = EventRepo(db);
@@ -43,6 +45,11 @@ class AppServices {
 
     this.pairingService = pairingService ??
         PairingService(configs: db.appConfigsDao, abilityRepo: abilityRepo);
+
+    kioskService = KioskService(
+      configs: db.appConfigsDao,
+      handler: kioskHandler,
+    );
 
     contentPuller = ContentPuller(
       configs: db.appConfigsDao,
@@ -82,6 +89,7 @@ class AppServices {
   late final PairingService pairingService;
   late final ContentPuller contentPuller;
   late final SyncEngine syncEngine;
+  late final KioskService kioskService;
 
   static const String patientIdKey = 'patientId';
 

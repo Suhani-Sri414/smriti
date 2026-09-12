@@ -95,7 +95,7 @@ a new session for the next task.
 ## Phase 6 — remaining
 - [ ] **A13** Remaining games on the harness from A06.
 - [x] **A14** Diagnostics screen behind kiosk PIN.
-- [ ] **A15** Kiosk mode lockdown on the main activity.
+- [x] **A15** Kiosk mode lockdown on the main activity.
 - [ ] **A16** Voice output (pre-recorded phrase playback) + constrained voice input for
       home-screen commands.
 - [ ] **A17** 48-hour airplane-mode test. Play across two days offline, reconnect,

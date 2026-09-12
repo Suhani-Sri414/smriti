@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smriti/core/app_services.dart';
 import 'package:smriti/core/db/database.dart';
+import 'package:smriti/core/kiosk/kiosk_service.dart';
 import 'package:smriti/core/reminders/alarm_scheduler.dart';
 import 'package:smriti/core/reminders/health_check.dart';
 import 'package:smriti/core/repo/content_repo.dart';
@@ -12,6 +15,41 @@ import 'package:smriti/screens/reminder_screen.dart';
 
 import '../core/reminders/_fake_alarm_api.dart';
 import '../core/repo/_test_db.dart';
+
+class _FakeKioskHandler implements KioskHandler {
+  _FakeKioskHandler({bool initialActive = false}) : _isActive = initialActive;
+
+  bool _isActive;
+  final StreamController<bool> _controller = StreamController<bool>.broadcast();
+  int startCalls = 0;
+  int stopCalls = 0;
+
+  @override
+  Future<bool> get isKioskMode async => _isActive;
+
+  @override
+  Future<bool> startKioskMode() async {
+    startCalls++;
+    _isActive = true;
+    _controller.add(true);
+    return true;
+  }
+
+  @override
+  Future<bool> stopKioskMode() async {
+    stopCalls++;
+    _isActive = false;
+    _controller.add(false);
+    return true;
+  }
+
+  @override
+  Stream<bool> watchKioskMode() => _controller.stream;
+
+  void dispose() {
+    _controller.close();
+  }
+}
 
 class _FakePermissionGateway implements PermissionGateway {
   @override
@@ -40,6 +78,7 @@ void main() {
   late AppServices services;
   late FakeAlarmApi alarmApi;
   late AlarmScheduler scheduler;
+  late _FakeKioskHandler kioskHandler;
 
   setUp(() {
     db = newTestDb();
@@ -48,13 +87,16 @@ void main() {
       contentRepo: ContentRepo(db),
       alarmApi: alarmApi,
     );
+    kioskHandler = _FakeKioskHandler();
     services = AppServices(
       database: db,
       alarmScheduler: scheduler,
+      kioskHandler: kioskHandler,
     );
   });
 
   tearDown(() async {
+    kioskHandler.dispose();
     await db.close();
   });
 
@@ -369,6 +411,49 @@ void main() {
 
       expect(find.text('Caregiver PIN updated successfully.'), findsOneWidget);
       expect(await db.appConfigsDao.getValue('caregiverPin'), '7777');
+    });
+
+    testWidgets('displays kiosk mode status and toggles lock task',
+        (tester) async {
+      configureLandscapeTablet(tester);
+      await seedData();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DiagnosticsScreen(services: services),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('diag_kiosk_status')), findsOneWidget);
+      expect(find.text('Disabled (Unpinned)'), findsOneWidget);
+      expect(find.byKey(const Key('diag_kiosk_auto_status')), findsOneWidget);
+      expect(find.text('Disabled'), findsOneWidget);
+
+      final toggleBtn =
+          find.byKey(const Key('diagnostics_toggle_kiosk_button'));
+      await tester.ensureVisible(toggleBtn);
+      expect(find.text('Engage Kiosk Lockdown'), findsOneWidget);
+
+      // Tap toggle button to engage kiosk
+      await tester.tap(toggleBtn);
+      await tester.pumpAndSettle();
+
+      expect(kioskHandler.startCalls, 1);
+      expect(find.text('Active (Screen Pinned)'), findsOneWidget);
+      expect(find.text('Enabled on boot'), findsOneWidget);
+      expect(find.text('Exit Kiosk Mode (Unpin Screen)'), findsOneWidget);
+      expect(find.text('Kiosk mode enabled (Screen locked).'), findsOneWidget);
+
+      // Tap toggle button again to exit kiosk
+      await tester.tap(toggleBtn);
+      await tester.pumpAndSettle();
+
+      expect(kioskHandler.stopCalls, 1);
+      expect(find.text('Disabled (Unpinned)'), findsOneWidget);
+      expect(find.text('Disabled'), findsOneWidget);
+      expect(find.text('Engage Kiosk Lockdown'), findsOneWidget);
+      expect(find.text('Kiosk mode disabled (Screen unpinned).'), findsOneWidget);
     });
   });
 

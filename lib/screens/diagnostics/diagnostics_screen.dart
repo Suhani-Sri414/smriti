@@ -53,6 +53,8 @@ class _DiagnosticsData {
     required this.scheduledAlarmsCount,
     required this.activeMedications,
     required this.healthReport,
+    required this.isKioskActive,
+    required this.isKioskConfigured,
   });
 
   final String? patientId;
@@ -71,6 +73,8 @@ class _DiagnosticsData {
   final int scheduledAlarmsCount;
   final List<Medication> activeMedications;
   final HealthCheckReport? healthReport;
+  final bool isKioskActive;
+  final bool isKioskConfigured;
 
   int get unsyncedTotal => unsyncedEvents + unsyncedMemos;
 }
@@ -131,6 +135,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       clockSkew = int.tryParse(clockSkewRaw);
     }
 
+    final isKioskActive = await widget.services.kioskService.isKioskActive();
+    final isKioskConfigured =
+        await widget.services.kioskService.isKioskConfigured();
+
     if (mounted) {
       setState(() {
         _data = _DiagnosticsData(
@@ -150,6 +158,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           scheduledAlarmsCount: scheduledAlarms,
           activeMedications: activeMeds,
           healthReport: report ?? _data?.healthReport,
+          isKioskActive: isKioskActive,
+          isKioskConfigured: isKioskConfigured,
         );
         _isLoading = false;
       });
@@ -803,7 +813,37 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     );
   }
 
+  Future<void> _toggleKioskMode() async {
+    final active = _data?.isKioskActive ?? false;
+    setState(() {
+      _statusBanner = active
+          ? 'Releasing kiosk lockdown...'
+          : 'Engaging kiosk lockdown...';
+      _bannerColor = Colors.indigo;
+    });
+
+    try {
+      if (active) {
+        await widget.services.kioskService.disableKiosk();
+        _statusBanner = 'Kiosk mode disabled (Screen unpinned).';
+        _bannerColor = Colors.orange.shade900;
+      } else {
+        await widget.services.kioskService.enableKiosk();
+        _statusBanner = 'Kiosk mode enabled (Screen locked).';
+        _bannerColor = Colors.green.shade700;
+      }
+      await _loadDiagnostics();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusBanner = 'Failed to toggle kiosk mode: $e';
+        _bannerColor = Colors.red.shade700;
+      });
+    }
+  }
+
   Widget _buildSecurityCard() {
+    final d = _data!;
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -818,18 +858,47 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
-                    'Caregiver Security & PIN',
+                    'Caregiver Security & Kiosk',
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
             const Divider(height: 20),
-            const Text(
-              'The Caregiver PIN guards this diagnostics screen and kiosk lockdown settings.',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
+            _buildRow(
+              'Kiosk Lockdown',
+              d.isKioskActive ? 'Active (Screen Pinned)' : 'Disabled (Unpinned)',
+              key: 'diag_kiosk_status',
+              statusColor: d.isKioskActive
+                  ? Colors.green.shade700
+                  : Colors.orange.shade800,
+            ),
+            _buildRow(
+              'Auto-Lockdown',
+              d.isKioskConfigured ? 'Enabled on boot' : 'Disabled',
+              key: 'diag_kiosk_auto_status',
             ),
             const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                key: const Key('diagnostics_toggle_kiosk_button'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: d.isKioskActive
+                      ? Colors.orange.shade800
+                      : Colors.teal.shade700,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _toggleKioskMode,
+                icon: Icon(d.isKioskActive
+                    ? Icons.lock_open_rounded
+                    : Icons.lock_outline_rounded),
+                label: Text(d.isKioskActive
+                    ? 'Exit Kiosk Mode (Unpin Screen)'
+                    : 'Engage Kiosk Lockdown'),
+              ),
+            ),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(

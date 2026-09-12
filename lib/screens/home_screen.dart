@@ -43,6 +43,12 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.voiceCommander ?? FakeVoiceCommander();
 
   @override
+  void initState() {
+    super.initState();
+    widget.services.kioskService.autoLockdownIfConfigured();
+  }
+
+  @override
   void dispose() {
     _voiceCommander.stopListening();
     super.dispose();
