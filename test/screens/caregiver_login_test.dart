@@ -4,11 +4,11 @@ import 'package:smriti/core/auth/pairing_service.dart';
 import 'package:smriti/core/db/database.dart';
 import 'package:smriti/core/repo/ability_repo.dart';
 import 'package:smriti/screens/login_screen.dart';
-import 'package:smriti/screens/pairing/pair_confirm_screen.dart';
-import 'package:smriti/screens/pairing/patient_picker_screen.dart';
+import 'package:smriti/screens/pairing/code_entry_screen.dart';
+import 'package:smriti/screens/pairing/scan_screen.dart';
 
 import '../core/auth/pairing_service_test.dart'
-    show FakePairingGateway, patientRow, successBody;
+    show FakePairingGateway, successBody;
 import '../core/repo/_test_db.dart';
 
 void main() {
@@ -17,172 +17,145 @@ void main() {
   setUp(() => db = newTestDb());
   tearDown(() async => db.close());
 
-  Future<FakePairingGateway> pumpLogin(
-    WidgetTester tester, {
-    required List<Map<String, dynamic>> patientRows,
-  }) async {
+  Widget buildLoginScreen({
+    required PairingService service,
+    VoidCallback? onPaired,
+  }) {
+    return MaterialApp(
+      home: LoginScreen(
+        pairingService: service,
+        onPaired: onPaired,
+      ),
+    );
+  }
+
+  testWidgets('renders device pairing options without email or password fields',
+      (tester) async {
     final gateway = FakePairingGateway(
       response: PairingResponse(status: 200, data: successBody()),
-      patientRows: patientRows,
+    );
+    final service = PairingService(
+      configs: db.appConfigsDao,
+      abilityRepo: AbilityRepo(db),
+      gateway: gateway,
+    );
+
+    await tester.pumpWidget(buildLoginScreen(service: service));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.text('Device Pairing'), findsOneWidget);
+    expect(find.text('Memories for a brighter tomorrow'), findsOneWidget);
+    expect(find.byKey(const Key('scan_qr_button')), findsOneWidget);
+    expect(find.byKey(const Key('enter_code_button')), findsOneWidget);
+    expect(find.text('Scan QR Code'), findsOneWidget);
+    expect(find.text('Enter Pairing Code'), findsOneWidget);
+
+    // Verify email and password options are absent
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byKey(const Key('sign_in_button')), findsNothing);
+    expect(find.text('Sign In'), findsNothing);
+    expect(find.text('Email address'), findsNothing);
+    expect(find.text('Password'), findsNothing);
+  });
+
+  testWidgets('tapping scan QR opens ScanScreen and triggers onPaired on success',
+      (tester) async {
+    var onPairedCalled = false;
+    final gateway = FakePairingGateway(
+      response: PairingResponse(status: 200, data: successBody()),
+    );
+    final service = PairingService(
+      configs: db.appConfigsDao,
+      abilityRepo: AbilityRepo(db),
+      gateway: gateway,
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: LoginScreen(
-          pairingService: PairingService(
-            configs: db.appConfigsDao,
-            abilityRepo: AbilityRepo(db),
-            gateway: gateway,
-          ),
-        ),
+      buildLoginScreen(
+        service: service,
+        onPaired: () => onPairedCalled = true,
       ),
     );
-    return gateway;
-  }
-
-  Future<void> signIn(WidgetTester tester) async {
-    await tester.enterText(find.byType(TextField).first, 'c@example.com');
-    await tester.enterText(find.byType(TextField).last, 'password');
-    await tester.tap(find.byKey(const Key('sign_in_button')));
-    await tester.pumpAndSettle();
-  }
-
-  testWidgets('one patient skips the picker and goes to confirmation',
-      (tester) async {
-    await pumpLogin(
-      tester,
-      patientRows: [patientRow(id: 'p1', displayName: 'Aai')],
-    );
-
-    await signIn(tester);
-
-    expect(find.byType(PatientPickerScreen), findsNothing,
-        reason: 'a single patient needs no picker');
-    expect(find.byType(PairConfirmScreen), findsOneWidget);
-    expect(find.byKey(const Key('confirm_patient_name')), findsOneWidget);
-    expect(find.text('Aai'), findsOneWidget);
-  });
-
-  testWidgets('more than one patient shows the picker first', (tester) async {
-    await pumpLogin(
-      tester,
-      patientRows: [
-        patientRow(id: 'p1', displayName: 'Aai'),
-        patientRow(id: 'p2', displayName: 'Deuta'),
-        patientRow(id: 'p3', displayName: 'Mama'),
-      ],
-    );
-
-    await signIn(tester);
-
-    expect(find.byType(PatientPickerScreen), findsOneWidget);
-    expect(find.text('Aai'), findsOneWidget);
-    expect(find.text('Deuta'), findsOneWidget);
-    expect(find.text('Mama'), findsOneWidget);
-    expect(find.byType(PairConfirmScreen), findsNothing);
-
-    // Choosing one moves on to confirmation for that patient.
-    await tester.tap(find.byKey(const Key('patient_p2')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(PairConfirmScreen), findsOneWidget);
-    expect(find.text('Deuta'), findsOneWidget);
-  });
-
-  testWidgets('confirming pairs the chosen patient and signs the caregiver out',
-      (tester) async {
-    final gateway = await pumpLogin(
-      tester,
-      patientRows: [
-        patientRow(id: 'p1', displayName: 'Aai'),
-        patientRow(id: 'p2', displayName: 'Deuta'),
-      ],
-    );
-
-    await signIn(tester);
-    await tester.tap(find.byKey(const Key('patient_p2')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm_pair_button')));
+    await tester.tap(find.byKey(const Key('scan_qr_button')));
     await tester.pumpAndSettle();
 
-    // The chosen patient, not merely the first one.
-    expect(gateway.bodies.single, {'patient_id': 'p2'});
-    expect(gateway.calls, [
-      'signIn',
-      'fetchPatients',
-      'invoke:pair-device-authenticated',
-      'signOut',
-      'setSession',
-    ]);
+    expect(find.byType(ScanScreen), findsOneWidget);
 
-    expect(await db.appConfigsDao.getValue('patientId'), isNotNull);
+    // Pop with true to simulate successful scan pairing
+    Navigator.of(tester.element(find.byType(ScanScreen))).pop(true);
+    await tester.pumpAndSettle();
+
     expect(find.byType(LoginScreen), findsOneWidget);
+    expect(onPairedCalled, isTrue);
   });
 
-  testWidgets('backing out of the picker signs the caregiver out',
+  testWidgets(
+      'tapping enter pairing code opens CodeEntryScreen and triggers onPaired on success',
       (tester) async {
-    final gateway = await pumpLogin(
-      tester,
-      patientRows: [
-        patientRow(id: 'p1', displayName: 'Aai'),
-        patientRow(id: 'p2', displayName: 'Deuta'),
-      ],
+    var onPairedCalled = false;
+    final gateway = FakePairingGateway(
+      response: PairingResponse(status: 200, data: successBody()),
+    );
+    final service = PairingService(
+      configs: db.appConfigsDao,
+      abilityRepo: AbilityRepo(db),
+      gateway: gateway,
     );
 
-    await signIn(tester);
-    expect(find.byType(PatientPickerScreen), findsOneWidget);
-
-    // Cancel out of the picker without choosing.
-    Navigator.of(tester.element(find.byType(PatientPickerScreen))).pop();
+    await tester.pumpWidget(
+      buildLoginScreen(
+        service: service,
+        onPaired: () => onPairedCalled = true,
+      ),
+    );
     await tester.pumpAndSettle();
 
-    expect(gateway.signOuts, 1,
-        reason: 'the tablet must not keep caregiver credentials');
-    expect(gateway.sessions, isEmpty);
-    expect(await db.appConfigsDao.getValue('patientId'), isNull);
+    await tester.tap(find.byKey(const Key('enter_code_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CodeEntryScreen), findsOneWidget);
+
+    // Pop with true to simulate successful code pairing
+    Navigator.of(tester.element(find.byType(CodeEntryScreen))).pop(true);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(onPairedCalled, isTrue);
   });
 
-  testWidgets('backing out of confirmation signs the caregiver out',
+  testWidgets('backing out without pairing does not trigger onPaired',
       (tester) async {
-    final gateway = await pumpLogin(
-      tester,
-      patientRows: [patientRow(id: 'p1', displayName: 'Aai')],
+    var onPairedCalled = false;
+    final gateway = FakePairingGateway(
+      response: PairingResponse(status: 200, data: successBody()),
+    );
+    final service = PairingService(
+      configs: db.appConfigsDao,
+      abilityRepo: AbilityRepo(db),
+      gateway: gateway,
     );
 
-    await signIn(tester);
-    expect(find.byType(PairConfirmScreen), findsOneWidget);
+    await tester.pumpWidget(
+      buildLoginScreen(
+        service: service,
+        onPaired: () => onPairedCalled = true,
+      ),
+    );
+    await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('enter_code_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CodeEntryScreen), findsOneWidget);
+
+    // Back out without completing pairing
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
 
-    expect(gateway.signOuts, 1);
-    expect(gateway.sessions, isEmpty);
-    expect(await db.appConfigsDao.getValue('patientId'), isNull);
     expect(find.byType(LoginScreen), findsOneWidget);
-  });
-
-  testWidgets('a sign-in failure surfaces and pairs nothing', (tester) async {
-    final gateway = FakePairingGateway(
-      signInError: Exception('invalid login credentials'),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: LoginScreen(
-          pairingService: PairingService(
-            configs: db.appConfigsDao,
-            abilityRepo: AbilityRepo(db),
-            gateway: gateway,
-          ),
-        ),
-      ),
-    );
-
-    await signIn(tester);
-
-    expect(find.byType(PatientPickerScreen), findsNothing);
-    expect(find.byType(PairConfirmScreen), findsNothing);
-    expect(find.byType(SnackBar), findsOneWidget);
-    expect(await db.appConfigsDao.getValue('patientId'), isNull);
+    expect(onPairedCalled, isFalse);
   });
 }

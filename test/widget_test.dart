@@ -11,7 +11,7 @@ import 'package:smriti/screens/login_screen.dart';
 import 'core/repo/_test_db.dart';
 
 void main() {
-  testWidgets('an unpaired tablet opens on the login screen', (tester) async {
+  testWidgets('an unpaired tablet opens on the login screen with pairing options', (tester) async {
     final db = newTestDb();
     addTearDown(db.close);
 
@@ -19,7 +19,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(LoginScreen), findsOneWidget);
-    expect(find.text('Sign In'), findsOneWidget);
     expect(find.text('Scan QR Code'), findsOneWidget);
+    expect(find.text('Enter Pairing Code'), findsOneWidget);
+    expect(find.text('Sign In'), findsNothing);
   });
 }
