@@ -10,6 +10,7 @@ import 'debug_sheet.dart';
 import 'call_confirmation_screen.dart';
 import 'games_menu_screen.dart';
 import 'my_people_screen.dart';
+import 'today_screen.dart';
 
 /// Screen 01: The Elder Home Screen.
 ///
@@ -70,12 +71,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _onTodayTapped(_HomeData data) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Today'),
-        duration: Duration(seconds: 2),
-        backgroundColor: AppColors.marigold,
+  Future<void> _onTodayTapped(_HomeData data) async {
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TodayScreen(
+          services: widget.services,
+        ),
       ),
     );
   }
