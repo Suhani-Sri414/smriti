@@ -8,6 +8,8 @@ import '../core/app_services.dart';
 import '../core/db/database.dart';
 import '../core/voice/voice_commander.dart';
 import 'debug_sheet.dart';
+import 'diagnostics/caregiver_pin_dialog.dart';
+import 'diagnostics/diagnostics_screen.dart';
 import 'call_confirmation_screen.dart';
 import 'games_menu_screen.dart';
 import 'my_people_screen.dart';
@@ -118,6 +120,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openDebugSheet() => DebugSheet.show(context, widget.services);
+
+  Future<void> _openCaregiverDiagnostics() async {
+    final nav = Navigator.of(context);
+    final authenticated =
+        await CaregiverPinDialog.show(context, widget.services);
+    if (!authenticated || !mounted) return;
+    await nav.push(
+      MaterialPageRoute(
+        builder: (_) => DiagnosticsScreen(services: widget.services),
+      ),
+    );
+  }
 
   Future<void> _onMyPeopleTapped(_HomeData data) async {
     if (!mounted) return;
@@ -300,6 +314,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   _handleVoiceCommand(command);
                 },
                 onRetry: _startListening,
+              ),
+
+              // Hidden corner trigger for kiosk exit & caregiver diagnostics (APP-BUILD-SPEC.md §12)
+              Positioned(
+                top: 0,
+                right: 0,
+                width: 80,
+                height: 80,
+                child: GestureDetector(
+                  key: const Key('kiosk_exit_corner'),
+                  behavior: HitTestBehavior.translucent,
+                  onLongPress: _openCaregiverDiagnostics,
+                  child: const SizedBox.expand(),
+                ),
               ),
             ],
           );

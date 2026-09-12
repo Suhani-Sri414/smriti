@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../core/app_services.dart';
 import '../core/db/database.dart';
 import '../core/reminders/health_check.dart';
+import 'diagnostics/caregiver_pin_dialog.dart';
+import 'diagnostics/diagnostics_screen.dart';
 import 'reminder_screen.dart';
 
 /// Caregiver-facing debug panel, reached by long-pressing the home title.
@@ -91,6 +93,26 @@ class _DebugSheetState extends State<DebugSheet> {
               key: const Key('debug_fire_test_reminder'),
               onPressed: _busy ? null : _fireTestReminder,
               child: const Text('Fire test reminder now'),
+            ),
+            const SizedBox(height: 8),
+
+            OutlinedButton.icon(
+              key: const Key('debug_open_diagnostics'),
+              onPressed: () async {
+                final nav = Navigator.of(context);
+                final authed =
+                    await CaregiverPinDialog.show(context, widget.services);
+                if (!authed || !mounted) return;
+                nav.pop();
+                await nav.push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        DiagnosticsScreen(services: widget.services),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.settings_suggest_rounded, size: 18),
+              label: const Text('Full Diagnostics Screen (PIN)'),
             ),
             const SizedBox(height: 8),
 
