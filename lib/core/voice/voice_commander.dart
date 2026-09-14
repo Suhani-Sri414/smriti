@@ -190,12 +190,12 @@ class RealSpeechClient implements SpeechClient {
     await _speech.listen(
       onResult: (result) =>
           onResult(result.recognizedWords, result.finalResult),
-      listenFor: listenFor,
-      pauseFor: pauseFor,
-      localeId: localeId,
       listenOptions: stt.SpeechListenOptions(
         partialResults: true,
         cancelOnError: true,
+        listenFor: listenFor,
+        pauseFor: pauseFor,
+        localeId: localeId,
       ),
     );
   }
