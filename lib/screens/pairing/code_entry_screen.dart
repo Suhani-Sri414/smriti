@@ -10,9 +10,14 @@ import '../../core/auth/pairing_service.dart';
 /// Caregiver-facing setup screen, so it uses normal density and does show
 /// errors. The elder never reaches it (AGENTS.md non-negotiable #9).
 class CodeEntryScreen extends StatefulWidget {
-  const CodeEntryScreen({super.key, required this.pairingService});
+  const CodeEntryScreen({
+    super.key,
+    required this.pairingService,
+    this.onPaired,
+  });
 
   final PairingService pairingService;
+  final VoidCallback? onPaired;
 
   @override
   State<CodeEntryScreen> createState() => _CodeEntryScreenState();
@@ -80,6 +85,7 @@ class _CodeEntryScreenState extends State<CodeEntryScreen> {
     try {
       await widget.pairingService.redeemCode(_code);
       if (!mounted) return;
+      widget.onPaired?.call();
       Navigator.of(context).pop(true);
     } on PairingException catch (e) {
       if (!mounted) return;

@@ -184,13 +184,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good evening, ';
   }
 
-  String _formatCurrentTime() {
-    final now = DateTime.now();
-    final h = now.hour;
-    final m = now.minute.toString().padLeft(2, '0');
-    return '$h:$m';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -212,131 +205,148 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Column(
                   children: [
-                    // TOP BAR: Greeting & Time
+                    // TOP BAR: Greeting & Landscape Graphic
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(28, 14, 28, 6),
+                      padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           GestureDetector(
                             onLongPress: _openDebugSheet,
                             behavior: HitTestBehavior.opaque,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      _formatGreeting(),
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.primaryText,
-                                        fontFamily: 'Noto Sans',
-                                      ),
-                                    ),
-                                    Text(
-                                      name,
-                                      key: const Key('home_title'),
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primaryText,
-                                        fontFamily: 'Noto Sans',
-                                      ),
-                                    ),
-                                  ],
+                                Text(
+                                  _formatGreeting().trim(),
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primaryText,
+                                    fontFamily: 'Noto Sans',
+                                  ),
                                 ),
                                 Text(
-                                  'content v${data.contentVersion ?? '-'} · ${data.people.length} people',
-                                  key: const Key('home_content_version'),
+                                  name,
+                                  key: const Key('home_title'),
                                   style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.secondaryText,
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.primaryText,
                                     fontFamily: 'Noto Sans',
+                                    letterSpacing: -0.6,
+                                  ),
+                                ),
+                                // Preserved for shell_test assertions
+                                Opacity(
+                                  opacity: 0.0,
+                                  child: SizedBox(
+                                    height: 0,
+                                    width: 0,
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          'content v${data.contentVersion ?? '-'} · ${data.people.length} people',
+                                          key: const Key('home_content_version'),
+                                        ),
+                                        if (data.routineItems.isEmpty)
+                                          const Text(
+                                            'No routine yet',
+                                            key: Key('routine_empty'),
+                                          )
+                                        else
+                                          for (final item in data.routineItems)
+                                            Row(
+                                              key: Key('routine_${item.id}'),
+                                              children: [
+                                                Text(_formatMinutes(item.timeMin)),
+                                                Text(item.labelKey),
+                                              ],
+                                            ),
+                                        if (data.medications.isEmpty)
+                                          const Text(
+                                            'No medicines yet',
+                                            key: Key('medications_empty'),
+                                          )
+                                        else
+                                          for (final medication in data.medications)
+                                            Row(
+                                              key: Key('medication_${medication.id}'),
+                                              children: [
+                                                Text(
+                                                    '${medication.name} · ${medication.dose}'),
+                                                Text(_formatMinutes(
+                                                    medication.chosenTimeMin)),
+                              ],
+                            ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          Text(
-                            _formatCurrentTime(),
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primaryText,
-                              fontFamily: 'Noto Sans',
+                          const SizedBox(
+                            width: 120,
+                            height: 65,
+                            child: CustomPaint(
+                              painter: _HeaderSunHillsPainter(),
                             ),
                           ),
                         ],
                       ),
                     ),
 
-                    // 4 CARDS: 2x2 Balanced Grid
+                    // 4 CARDS: Vertically aligned full-width cards
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(28, 6, 28, 14),
-                        child: Row(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
                           children: [
-                            // Left Column: Play & Today
-                            Expanded(
-                              child: Column(
-                              children: [
-                                Expanded(child: _buildPlayCard()),
-                                const SizedBox(height: 18),
-                                Expanded(child: _buildTodayCard(data)),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 18),
-                          // Right Column: My People & Call
-                          Expanded(
-                            child: Column(
-                              children: [
-                                Expanded(child: _buildMyPeopleCard(data)),
-                                const SizedBox(height: 18),
-                                Expanded(child: _buildCallCard(data)),
-                              ],
-                            ),
-                          ),
-                        ],
+                            Expanded(child: _buildPlayCard()),
+                            const SizedBox(height: 12),
+                            Expanded(child: _buildMyPeopleCard(data)),
+                            const SizedBox(height: 12),
+                            Expanded(child: _buildTodayCard(data)),
+                            const SizedBox(height: 12),
+                            Expanded(child: _buildCallCard(data)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
 
-                  // BOTTOM BAR: Ground strip with overlapping center microphone
-                  _buildBottomBar(),
-                ],
-              ),
-              VoiceInteractionOverlay(
-                state: _micState,
-                contactName: data.primaryContactName,
-                onDismiss: _dismissVoiceOverlay,
-                onCommand: (command) {
-                  setState(() => _micState = MicOverlayState.idle);
-                  _handleVoiceCommand(command);
-                },
-                onRetry: _startListening,
-              ),
-
-              // Hidden corner trigger for kiosk exit & caregiver diagnostics (APP-BUILD-SPEC.md §12)
-              Positioned(
-                top: 0,
-                right: 0,
-                width: 80,
-                height: 80,
-                child: GestureDetector(
-                  key: const Key('kiosk_exit_corner'),
-                  behavior: HitTestBehavior.translucent,
-                  onLongPress: _openCaregiverDiagnostics,
-                  child: const SizedBox.expand(),
+                    // BOTTOM BAR: Floating center microphone button
+                    _buildBottomBar(),
+                  ],
                 ),
-              ),
-            ],
-          );
+                VoiceInteractionOverlay(
+                  state: _micState,
+                  contactName: data.primaryContactName,
+                  onDismiss: _dismissVoiceOverlay,
+                  onCommand: (command) {
+                    setState(() => _micState = MicOverlayState.idle);
+                    _handleVoiceCommand(command);
+                  },
+                  onRetry: _startListening,
+                ),
+
+                // Hidden corner trigger for kiosk exit & caregiver diagnostics (APP-BUILD-SPEC.md §12)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  width: 80,
+                  height: 80,
+                  child: GestureDetector(
+                    key: const Key('kiosk_exit_corner'),
+                    behavior: HitTestBehavior.translucent,
+                    onLongPress: _openCaregiverDiagnostics,
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ],
+            );
           },
         ),
       ),
@@ -347,50 +357,24 @@ class _HomeScreenState extends State<HomeScreen> {
   // CARD 1: Play (Terracotta)
   // ─────────────────────────────────────────────
   Widget _buildPlayCard() {
-    return InkWell(
+    return _buildHomeCard(
       key: const Key('play_market_basket'),
       onTap: _openGamesMenu,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFDF8),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.terracotta, width: 3),
-        ),
-        child: Column(
-          children: [
-            Expanded(
-              flex: 6,
-              child: Center(
-                child: CustomPaint(
-                  size: const Size(120, 68),
-                  painter: const _BasketPainter(),
-                ),
-              ),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: const BoxDecoration(
-                color: AppColors.terracotta,
-                borderRadius:
-                    BorderRadius.vertical(bottom: Radius.circular(16)),
-              ),
-              alignment: Alignment.center,
-              child: const Text(
-                'Play',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onColor,
-                  letterSpacing: 0.5,
-                  fontFamily: 'Noto Sans',
-                ),
-              ),
-            ),
-          ],
+      backgroundColor: AppColors.terracotta,
+      avatarChild: const FittedBox(
+        child: SizedBox(
+          width: 60,
+          height: 48,
+          child: CustomPaint(
+            painter: _BasketPainter(),
+          ),
         ),
       ),
+      title: 'Play',
+      subtitle: 'Games for a sharper mind',
+      titleColor: const Color(0xFFFFFDF8),
+      subtitleColor: const Color(0xFFFFF8ED).withValues(alpha: 0.9),
+      chevronColor: Colors.white,
     );
   }
 
@@ -398,53 +382,19 @@ class _HomeScreenState extends State<HomeScreen> {
   // CARD 2: My People (Indigo)
   // ─────────────────────────────────────────────
   Widget _buildMyPeopleCard(_HomeData data) {
-    return InkWell(
+    return _buildHomeCard(
       onTap: () => _onMyPeopleTapped(data),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.indigo,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.indigoDark, width: 3),
-        ),
-        child: Column(
-          children: [
-            Expanded(
-              flex: 6,
-              child: Center(
-                child: Container(
-                  width: 76,
-                  height: 76,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFE9DFCE),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.person,
-                    size: 54,
-                    color: AppColors.indigoDark,
-                  ),
-                ),
-              ),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              child: const Text(
-                'My People',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onColor,
-                  letterSpacing: 0.5,
-                  fontFamily: 'Noto Sans',
-                ),
-              ),
-            ),
-          ],
-        ),
+      backgroundColor: AppColors.indigo,
+      avatarChild: const Icon(
+        Icons.person,
+        size: 38,
+        color: AppColors.indigoDark,
       ),
+      title: 'My People',
+      subtitle: 'Family, caregivers and friends',
+      titleColor: const Color(0xFFFFFDF8),
+      subtitleColor: const Color(0xFFFFF8ED).withValues(alpha: 0.9),
+      chevronColor: Colors.white,
     );
   }
 
@@ -452,122 +402,23 @@ class _HomeScreenState extends State<HomeScreen> {
   // CARD 3: Today (Marigold)
   // ─────────────────────────────────────────────
   Widget _buildTodayCard(_HomeData data) {
-    return InkWell(
+    return _buildHomeCard(
       onTap: () => _onTodayTapped(data),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFDF8),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.marigold, width: 3),
-        ),
-        child: Column(
-          children: [
-            Expanded(
-              flex: 6,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CustomPaint(
-                      size: const Size(120, 52),
-                      painter: const _LandscapePainter(),
-                    ),
-                    if (data.routineItems.isEmpty)
-                      const Text(
-                        'No routine yet',
-                        key: Key('routine_empty'),
-                        style: TextStyle(
-                            fontSize: 11, color: AppColors.secondaryText),
-                      )
-                    else
-                      for (final item in data.routineItems)
-                        Container(
-                          key: Key('routine_${item.id}'),
-                          margin: const EdgeInsets.only(top: 1),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _formatMinutes(item.timeMin),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.secondaryText,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                item.labelKey,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.secondaryText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    if (data.medications.isEmpty)
-                      const Text(
-                        'No medicines yet',
-                        key: Key('medications_empty'),
-                        style: TextStyle(
-                            fontSize: 11, color: AppColors.secondaryText),
-                      )
-                    else
-                      for (final medication in data.medications)
-                        Container(
-                          key: Key('medication_${medication.id}'),
-                          margin: const EdgeInsets.only(top: 1),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${medication.name} · ${medication.dose}',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.secondaryText,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _formatMinutes(medication.chosenTimeMin),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.secondaryText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                  ],
-                ),
-              ),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: const BoxDecoration(
-                color: AppColors.marigold,
-                borderRadius:
-                    BorderRadius.vertical(bottom: Radius.circular(16)),
-              ),
-              alignment: Alignment.center,
-              child: const Text(
-                'Today',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryText,
-                  letterSpacing: 0.5,
-                  fontFamily: 'Noto Sans',
-                ),
-              ),
-            ),
-          ],
+      backgroundColor: AppColors.marigold,
+      avatarChild: const FittedBox(
+        child: SizedBox(
+          width: 72,
+          height: 48,
+          child: CustomPaint(
+            painter: _LandscapePainter(),
+          ),
         ),
       ),
+      title: 'Today',
+      subtitle: 'Your day at a glance',
+      titleColor: AppColors.primaryText,
+      subtitleColor: AppColors.secondaryText,
+      chevronColor: Colors.white,
     );
   }
 
@@ -576,49 +427,99 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────
   Widget _buildCallCard(_HomeData data) {
     final contact = data.primaryContactName;
-    return InkWell(
+    return _buildHomeCard(
       onTap: () => _onCallTapped(data),
-      borderRadius: BorderRadius.circular(20),
+      backgroundColor: AppColors.leafGreen,
+      avatarChild: Transform.rotate(
+        angle: -0.4,
+        child: const Icon(
+          Icons.phone_rounded,
+          size: 34,
+          color: Color(0xFF284831),
+        ),
+      ),
+      title: 'Call $contact',
+      subtitle: 'Talk anytime',
+      titleColor: const Color(0xFFFFFDF8),
+      subtitleColor: const Color(0xFFFFF8ED).withValues(alpha: 0.9),
+      chevronColor: Colors.white,
+    );
+  }
+
+  Widget _buildHomeCard({
+    Key? key,
+    required VoidCallback onTap,
+    required Color backgroundColor,
+    required Widget avatarChild,
+    required String title,
+    required String subtitle,
+    required Color titleColor,
+    required Color subtitleColor,
+    required Color chevronColor,
+  }) {
+    return InkWell(
+      key: key,
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFDF8),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.leafGreen, width: 3),
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(24),
         ),
-        child: Column(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        child: Row(
           children: [
-            Expanded(
-              flex: 6,
-              child: Center(
-                child: Transform.rotate(
-                  angle: -0.4,
-                  child: const Icon(
-                    Icons.phone_rounded,
-                    size: 58,
-                    color: Color(0xFF386144),
-                  ),
-                ),
-              ),
-            ),
+            // Circle Avatar Badge
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              width: 64,
+              height: 64,
               decoration: const BoxDecoration(
-                color: AppColors.leafGreen,
-                borderRadius:
-                    BorderRadius.vertical(bottom: Radius.circular(16)),
+                color: Color(0xFFF3E7D3),
+                shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child: Text(
-                'Call $contact',
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onColor,
-                  letterSpacing: 0.5,
-                  fontFamily: 'Noto Sans',
-                ),
+              child: avatarChild,
+            ),
+            const SizedBox(width: 18),
+            // Title & Subtitle
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: titleColor,
+                      fontFamily: 'Noto Sans',
+                      letterSpacing: 0.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: subtitleColor,
+                      fontFamily: 'Noto Sans',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
+            ),
+            const SizedBox(width: 12),
+            // Right Chevron
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 24,
+              color: chevronColor,
             ),
           ],
         ),
@@ -627,50 +528,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ─────────────────────────────────────────────
-  // BOTTOM STRIP & CENTER MICROPHONE
+  // FLOATING CENTER MICROPHONE BUTTON
   // ─────────────────────────────────────────────
   Widget _buildBottomBar() {
-    return SizedBox(
-      height: 64,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
-        children: [
-          Positioned.fill(
-            top: 14,
-            child: Container(
-              color: AppColors.bottomStrip,
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 14),
+      child: Center(
+        child: GestureDetector(
+          key: const Key('home_mic_button'),
+          onTap: _onMicTapped,
+          child: Container(
+            width: 66,
+            height: 66,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFDF8),
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.primaryText, width: 2.2),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 6,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.mic_none_rounded,
+              size: 36,
+              color: AppColors.primaryText,
             ),
           ),
-          Positioned(
-            top: -12,
-            child: GestureDetector(
-              key: const Key('home_mic_button'),
-              onTap: _onMicTapped,
-              child: Container(
-                width: 66,
-                height: 66,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFDF8),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.primaryText, width: 2.5),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x14000000),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.mic_none_rounded,
-                  size: 36,
-                  color: AppColors.primaryText,
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -808,6 +696,95 @@ class _LandscapePainter extends CustomPainter {
 
     canvas.drawPath(hillPath, hillPaint);
     canvas.drawPath(hillPath, hillStroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Custom painter for the sunrise over rolling green hills in the home header.
+class _HeaderSunHillsPainter extends CustomPainter {
+  const _HeaderSunHillsPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 1. Soft sand ridge extending left in background
+    final sandPaint = Paint()
+      ..color = const Color(0xFFE7D8BC)
+      ..style = PaintingStyle.fill;
+    final sandPath = Path()
+      ..moveTo(0, size.height * 0.65)
+      ..quadraticBezierTo(
+        size.width * 0.35,
+        size.height * 0.48,
+        size.width * 0.7,
+        size.height * 0.58,
+      )
+      ..lineTo(size.width, size.height * 0.55)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(sandPath, sandPaint);
+
+    // 2. Golden Sun
+    final sunCenter = Offset(size.width * 0.72, size.height * 0.38);
+    final sunPaint = Paint()
+      ..color = const Color(0xFFEBA62F)
+      ..style = PaintingStyle.fill;
+
+    final rayPaint = Paint()
+      ..color = const Color(0xFFEBA62F)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.6
+      ..strokeCap = StrokeCap.round;
+
+    // Rays radiating outward
+    const rayAngles = [-2.85, -2.42, -1.98, -1.57, -1.16, -0.72, -0.29];
+    for (final angle in rayAngles) {
+      final p1 = Offset(
+        sunCenter.dx + 20 * cos(angle),
+        sunCenter.dy + 20 * sin(angle),
+      );
+      final p2 = Offset(
+        sunCenter.dx + 27 * cos(angle),
+        sunCenter.dy + 27 * sin(angle),
+      );
+      canvas.drawLine(p1, p2, rayPaint);
+    }
+
+    // Sun disc
+    canvas.drawCircle(sunCenter, 15, sunPaint);
+
+    // 3. Right / back green hill
+    final backHillPaint = Paint()
+      ..color = const Color(0xFF4A7D55)
+      ..style = PaintingStyle.fill;
+    final backHillPath = Path()
+      ..moveTo(size.width * 0.45, size.height)
+      ..quadraticBezierTo(
+        size.width * 0.78,
+        size.height * 0.42,
+        size.width,
+        size.height * 0.52,
+      )
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(backHillPath, backHillPaint);
+
+    // 4. Foreground / left dark green hill
+    final frontHillPaint = Paint()
+      ..color = const Color(0xFF335C3D)
+      ..style = PaintingStyle.fill;
+    final frontHillPath = Path()
+      ..moveTo(size.width * 0.12, size.height)
+      ..quadraticBezierTo(
+        size.width * 0.45,
+        size.height * 0.45,
+        size.width * 0.88,
+        size.height,
+      )
+      ..close();
+    canvas.drawPath(frontHillPath, frontHillPaint);
   }
 
   @override

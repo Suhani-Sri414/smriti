@@ -31,7 +31,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _openPairingScanner() async {
     final paired = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => ScanScreen(pairingService: _pairingService),
+        builder: (_) => ScanScreen(
+          pairingService: _pairingService,
+          onPaired: widget.onPaired,
+        ),
       ),
     );
 
@@ -44,7 +47,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _openCodeEntry() async {
     final paired = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CodeEntryScreen(pairingService: _pairingService),
+        builder: (_) => CodeEntryScreen(
+          pairingService: _pairingService,
+          onPaired: widget.onPaired,
+        ),
       ),
     );
 

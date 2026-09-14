@@ -33,16 +33,30 @@ class _StartupGateState extends State<StartupGate> {
     return paired;
   }
 
-  /// Pairing just succeeded. Pull content before showing home, because a home
-  /// screen with no medications or routine is the thing this task exists to
-  /// avoid — this is the one place the wait is worth it.
+  /// Pairing just succeeded. Pull content in the background (AGENTS.md, the
+  /// one principle: SQLite on the tablet is the source of truth, nothing on
+  /// screen ever waits on the network).
   Future<bool> _resolveAfterPairing() async {
-    await widget.services.syncEngine.run(trigger: SyncTrigger.manual);
-    return widget.services.isPaired();
+    try {
+      final paired = await widget.services.isPaired();
+      if (paired) {
+        unawaited(widget.services.syncEngine.run(trigger: SyncTrigger.manual));
+      }
+      return paired;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Re-checks after pairing completes on the login screen.
-  void _recheck() => setState(() => _paired = _resolveAfterPairing());
+  void _recheck() {
+    if (mounted) {
+      final next = _resolveAfterPairing();
+      setState(() {
+        _paired = next;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -10,9 +10,14 @@ import 'code_entry_screen.dart';
 /// Caregiver-facing setup screen — it shows progress and errors, which the
 /// elder-facing app never does (AGENTS.md non-negotiable #9).
 class ScanScreen extends StatefulWidget {
-  const ScanScreen({super.key, required this.pairingService});
+  const ScanScreen({
+    super.key,
+    required this.pairingService,
+    this.onPaired,
+  });
 
   final PairingService pairingService;
+  final VoidCallback? onPaired;
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -54,6 +59,7 @@ class _ScanScreenState extends State<ScanScreen> {
     try {
       await widget.pairingService.redeemToken(token);
       if (!mounted) return;
+      widget.onPaired?.call();
       Navigator.of(context).pop(true);
     } on PairingException catch (e) {
       _failed(e.message);
@@ -81,7 +87,10 @@ class _ScanScreenState extends State<ScanScreen> {
   Future<void> _openCodeEntry() async {
     final paired = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CodeEntryScreen(pairingService: widget.pairingService),
+        builder: (_) => CodeEntryScreen(
+          pairingService: widget.pairingService,
+          onPaired: widget.onPaired,
+        ),
       ),
     );
     if (paired == true && mounted) {

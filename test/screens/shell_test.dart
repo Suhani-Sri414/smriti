@@ -12,9 +12,14 @@ import 'package:smriti/core/voice/voice_player.dart';
 import 'package:smriti/screens/debug_sheet.dart';
 import 'package:smriti/screens/home_screen.dart';
 import 'package:smriti/screens/login_screen.dart';
+import 'package:smriti/core/auth/pairing_service.dart';
+import 'package:smriti/core/repo/ability_repo.dart';
+import 'package:smriti/screens/pairing/code_entry_screen.dart';
 import 'package:smriti/screens/reminder_screen.dart';
 import 'package:smriti/screens/startup_gate.dart';
 
+import '../core/auth/pairing_service_test.dart'
+    show FakePairingGateway, successBody;
 import '../core/repo/_test_db.dart';
 import '../core/reminders/_fake_alarm_api.dart';
 
@@ -108,6 +113,51 @@ void main() {
 
       expect(find.byType(HomeScreen), findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
+    });
+
+    testWidgets('pairing via code entry transitions directly to home screen',
+        (tester) async {
+      final gateway = FakePairingGateway(
+        response: PairingResponse(status: 200, data: successBody()),
+      );
+      final pairingService = PairingService(
+        configs: db.appConfigsDao,
+        abilityRepo: AbilityRepo(db),
+        gateway: gateway,
+      );
+      final services = AppServices(
+        database: db,
+        pairingService: pairingService,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: StartupGate(services: services)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byType(HomeScreen), findsNothing);
+
+      // Open CodeEntryScreen
+      await tester.tap(find.byKey(const Key('enter_code_button')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CodeEntryScreen), findsOneWidget);
+
+      // Enter valid code from the 27-char alphabet (no B, I, O, 0, 1, 8)
+      const validCode = 'ACDEFGHJ';
+      for (var i = 0; i < validCode.length; i++) {
+        await tester.enterText(find.byKey(Key('code_box_$i')), validCode[i]);
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('pairing_submit')));
+      await tester.pumpAndSettle();
+
+      // Tablet should now be directly on HomeScreen without needing app restart!
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(find.byType(LoginScreen), findsNothing);
+      expect(find.byType(CodeEntryScreen), findsNothing);
     });
   });
 
