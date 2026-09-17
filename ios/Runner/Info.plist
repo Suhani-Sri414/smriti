@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Smriti needs microphone access so you can speak to your VoiceBot companion.</string>
 </dict>
 </plist>

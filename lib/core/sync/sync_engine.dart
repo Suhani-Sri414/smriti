@@ -81,11 +81,13 @@ class SyncEngine {
   }) async {
     if (_running) return SyncResult.skipped('already running');
 
-    // A session ending should always sync, whatever the throttle says.
+    // A session ending, manual sync, or connectivity restoration should always sync,
+    // whatever the throttle says.
     final throttled = _lastRun != null &&
         _now().difference(_lastRun!) < minInterval &&
         trigger != SyncTrigger.sessionEnd &&
-        trigger != SyncTrigger.manual;
+        trigger != SyncTrigger.manual &&
+        trigger != SyncTrigger.connectivity;
     if (throttled) return SyncResult.skipped('throttled');
 
     if (!await hasConnection()) return SyncResult.skipped('offline');

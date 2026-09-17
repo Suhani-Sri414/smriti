@@ -1,0 +1,1186 @@
+# Smriti Elder App — Backend & Data Architecture
+
+**For:** Flutter developer, elder tablet app
+**Stack:** Flutter + Drift (SQLite) + Supabase
+**Scope:** Everything on the device touching persistence, sync, alarms, or the backend. Not UI.
+
+
+## 1. The one principle
+
+**SQLite on the tablet is the source of truth. Supabase is a sync destination, not a database you query.**
+
+Games, reminders, ability estimation, photos and voice all read and write local SQLite and local files. Nothing on screen ever waits on a network call. Supabase receives batches of already-committed events after the fact, and supplies content updates when they exist.
+
+Practical consequences:
+
+- No screen ever shows a loading spinner for network reasons
+- No `await supabase...` appears anywhere in UI or game code
+- The app is fully functional in airplane mode, indefinitely, with zero degradation
+- If you're querying Supabase to render something, the design is wrong
+
+**Build the entire app against local SQLite first, with a mock content JSON.** Bolt sync on afterward. You are never blocked on the backend team.
+
+---
+
+## 2. Packages
+
+```yaml
+dependencies:
+  flutter_riverpod: ^2.5.0
+  drift: ^2.16.0
+  sqlite3_flutter_libs: ^0.5.20
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  supabase_flutter: ^2.5.0
+
+  workmanager: ^0.5.2
+  connectivity_plus: ^5.0.2
+  android_alarm_manager_plus: ^4.0.0
+  flutter_local_notifications: ^17.0.0
+  permission_handler: ^11.3.0
+  device_info_plus: ^9.1.2
+  android_intent_plus: ^4.0.3
+  wakelock_plus: ^1.2.0
+
+  just_audio: ^0.9.36
+  flutter_tts: ^4.0.2
+  record: ^5.0.4
+  speech_to_text: ^6.6.0
+
+  kiosk_mode: ^0.5.0
+  mobile_scanner: ^4.0.1
+  url_launcher: ^6.2.5
+  uuid: ^4.3.3
+  fuzzywuzzy: ^1.1.6
+  crypto: ^3.0.3
+
+dev_dependencies:
+  drift_dev: ^2.16.0
+  build_runner: ^2.4.8
+```
+
+```dart
+// main.dart
+await Supabase.initialize(
+  url: SUPABASE_URL,
+  anonKey: SUPABASE_ANON_KEY,
+  authOptions: const FlutterAuthClientOptions(
+    authFlowType: AuthFlowType.pkce,
+  ),
+);
+```
+
+Session persistence is automatic. The SDK stores and refreshes tokens itself — do not hand-roll this.
+
+---
+
+## 3. Layer architecture
+
+```
+┌──────────────────────────────────────────────────────┐
+│  UI (screens, games)                                 │
+│  Riverpod providers only. Zero network awareness.    │
+└────────────────────┬─────────────────────────────────┘
+┌────────────────────▼─────────────────────────────────┐
+│  REPOSITORIES                                        │
+│  ContentRepo · EventRepo · AbilityRepo · MemoRepo    │
+│  Read/write SQLite. Never touch Supabase.            │
+└────────────────────┬─────────────────────────────────┘
+┌────────────────────▼─────────────────────────────────┐
+│  DRIFT (SQLite)  ←── SOURCE OF TRUTH                 │
+└────────────────────┬─────────────────────────────────┘
+                     │  one-way, background only
+┌────────────────────▼─────────────────────────────────┐
+│  SYNC LAYER                                          │
+│  EventPusher · ContentPuller · MediaDownloader       │
+│  MemoUploader · EscalationWriter                     │
+│  ONLY layer that imports supabase_flutter.           │
+└────────────────────┬─────────────────────────────────┘
+┌────────────────────▼─────────────────────────────────┐
+│  Supabase (Postgres · Storage · Edge Functions)      │
+└──────────────────────────────────────────────────────┘
+```
+
+**Hard rule: no file outside `lib/core/sync/` and `lib/core/auth/` may import `supabase_flutter`.** Add a CI grep for it. This is the single most valuable structural constraint in the app.
+
+```
+lib/
+  core/
+    db/
+      database.dart          # Drift DB
+      tables.dart
+      dao/
+    repo/
+      content_repo.dart
+      event_repo.dart
+      ability_repo.dart
+      memo_repo.dart
+    auth/
+      pairing_service.dart   # 3 paths, one exit state
+    sync/
+      sync_engine.dart
+      event_pusher.dart
+      content_puller.dart
+      media_downloader.dart
+      memo_uploader.dart
+      escalation_writer.dart
+      supabase_refs.dart     # ALL table/bucket names in ONE file
+    reminders/
+      alarm_scheduler.dart
+      reminder_isolate.dart  # top-level callbacks
+      ladder.dart
+      health_check.dart
+    ability/
+      estimator.dart         # pure functions, no I/O
+    files/
+      file_paths.dart        # ALL local paths in ONE file
+    voice/
+  games/
+  screens/
+```
+
+---
+
+## 4. Local database schema
+
+**The six new columns marked ★ are mandatory and must go in before more app code is written.** They are what makes the detailed report page possible. An event you don't capture in October is gone forever — you cannot backfill it.
+
+```dart
+// ═══════════ APPEND-ONLY ═══════════
+// INSERT only. The single permitted UPDATE is flipping `synced`.
+// If code needs to modify a past event, insert a corrective one instead.
+
+class TrialEvents extends Table {
+  TextColumn get id => text()();                     // uuid v4, client-generated
+  TextColumn get sessionId => text()();
+  TextColumn get gameId => text()();
+  TextColumn get domain => text()();                 // memory|attention|executive|visuospatial|language
+
+  // ★ 1. Which specific item — unlocks per-person trajectories & savings
+  TextColumn get itemId => text()();                 // personId | soundId | itemSetHash
+
+  RealColumn get itemDifficulty => real()();
+  RealColumn get thetaBefore => real()();
+  BoolColumn get correct => boolean()();
+
+  // ★ 2. Split timing — initiation is executive, movement is motor
+  IntColumn get initiationMs => integer()();         // screen ready → first touch
+  IntColumn get movementMs => integer()();           // first touch → committed
+  IntColumn get responseTimeMs => integer()();       // total
+
+  // ★ 3. WHICH wrong answer, not just that it was wrong
+  TextColumn get chosenId => text().nullable()();
+  TextColumn get errorClass => text().nullable()();  // semantic|phonemic|random|perseverative|omission|repeat_selection
+
+  // ★ 4. Position & context — fatigue curves, post-error slowing, switch cost
+  IntColumn get trialIndex => integer()();           // 0-based within session
+  TextColumn get trialContext => text().nullable()();// post_switch|first_exposure|repeat_exposure
+
+  IntColumn get hintLevel => integer().withDefault(const Constant(0))();
+
+  // ★ 5. Game-specific metrics, JSON
+  TextColumn get metrics => text().nullable()();     // {"span_achieved":5,"stroke_velocity":142,"lifts":3}
+
+  IntColumn get ts => integer()();                   // device epoch ms
+  IntColumn get hourOfDay => integer()();
+  IntColumn get tzOffsetMin => integer()();
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
+  @override Set<Column> get primaryKey => {id};
+}
+
+class Sessions extends Table {
+  TextColumn get id => text()();
+  IntColumn get startedAt => integer()();
+  IntColumn get endedAt => integer().nullable()();
+  TextColumn get gameIds => text()();
+  BoolColumn get completed => boolean().withDefault(const Constant(false))();
+  IntColumn get abandonedAtMs => integer().nullable()();
+  IntColumn get demoReplays => integer().withDefault(const Constant(0))();  // ★ 6
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
+  @override Set<Column> get primaryKey => {id};
+}
+
+class ReminderEvents extends Table {
+  TextColumn get id => text()();
+  TextColumn get medicationId => text()();
+  IntColumn get scheduledAt => integer()();
+  IntColumn get firedAt => integer().nullable()();
+  IntColumn get respondedAt => integer().nullable()();
+  TextColumn get outcome => text().nullable()();     // confirmed|declined|no_response
+  TextColumn get channel => text()();                // in_app|call|sms
+  IntColumn get ladderStep => integer()();
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
+  @override Set<Column> get primaryKey => {id};
+}
+
+class VoiceMemos extends Table {
+  TextColumn get id => text()();
+  TextColumn get localPath => text()();
+  IntColumn get durationMs => integer()();
+  IntColumn get recordedAt => integer()();
+  TextColumn get contextTag => text().nullable()();  // personId if from album
+  BoolColumn get uploaded => boolean().withDefault(const Constant(false))();
+  @override Set<Column> get primaryKey => {id};
+}
+
+class EscalationRequests extends Table {
+  TextColumn get id => text()();                     // "{reminderEventId}_{step}"
+  TextColumn get reminderEventId => text()();
+  TextColumn get medicationId => text()();
+  IntColumn get step => integer()();
+  IntColumn get requestedAt => integer()();
+  BoolColumn get cancelled => boolean().withDefault(const Constant(false))();
+  BoolColumn get synced => boolean().withDefault(const Constant(false))();
+  @override Set<Column> get primaryKey => {id};
+}
+
+// ═══════════ MUTABLE, DEVICE-OWNED ═══════════
+
+class AbilityStates extends Table {
+  TextColumn get domain => text()();
+  RealColumn get theta => real()();
+  IntColumn get nTrials => integer()();
+  RealColumn get rtMeanLog => real()();
+  RealColumn get rtVar => real()();
+  IntColumn get updatedAt => integer()();
+  @override Set<Column> get primaryKey => {domain};
+}
+
+// ═══════════ CONTENT — pulled down, READ-ONLY to app code ═══════════
+// Only ContentPuller writes these tables.
+
+class People extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get relationship => text()();
+  TextColumn get photoPath => text()();              // LOCAL absolute path
+  TextColumn get voicePath => text().nullable()();
+  TextColumn get memoryPrompt => text().nullable()();
+  BoolColumn get isDeceased => boolean().withDefault(const Constant(false))();
+  IntColumn get sortOrder => integer()();
+  @override Set<Column> get primaryKey => {id};
+}
+
+class Medications extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get dose => text()();
+  TextColumn get pillPhotoPath => text().nullable()();
+  TextColumn get voicePath => text().nullable()();
+  IntColumn get windowStartMin => integer()();       // minutes from midnight
+  IntColumn get windowEndMin => integer()();
+  IntColumn get chosenTimeMin => integer()();        // bandit output, always within window
+  TextColumn get daysOfWeek => text()();             // "1,2,3,4,5,6,7"
+  BoolColumn get active => boolean().withDefault(const Constant(true))();
+  @override Set<Column> get primaryKey => {id};
+}
+
+class RoutineItems extends Table {
+  TextColumn get id => text()();
+  IntColumn get timeMin => integer()();
+  TextColumn get labelKey => text()();
+  TextColumn get iconAsset => text()();
+  @override Set<Column> get primaryKey => {id};
+}
+
+class AppConfigs extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+  @override Set<Column> get primaryKey => {key};
+}
+```
+
+**AppConfig keys:**
+
+```
+patientId · deviceUserId · langCode · script
+elderName · age · educationYears
+contentVersion · langPackVersion
+primaryContactName · primaryContactPhone
+secondaryContactName · secondaryContactPhone
+ladderConfigJson · caregiverPinHash
+consentGivenAt · lastSyncAt · lastSyncError · clockSkewMs
+```
+
+`caregiverPinHash` is SHA-256 with a per-device salt. Never store the PIN in plaintext.
+
+---
+
+## 5. Local file layout
+
+All paths derive from `getApplicationDocumentsDirectory()`. Centralize in `file_paths.dart`. Never construct a path inline.
+
+```
+<docs>/
+  people/{personId}_photo.jpg
+  people/{personId}_voice.m4a
+  meds/{medId}_pill.jpg
+  meds/{medId}_voice.m4a
+  lang/{langCode}/manifest.json
+  lang/{langCode}/strings.json
+  lang/{langCode}/audio/{phraseKey}.mp3     (~400 files)
+  memos/{memoId}.m4a
+  tmp/                                       (downloads land here first)
+```
+
+**Three rules:**
+
+1. **Nothing is fetched from the network at runtime.** Games read files from disk. If a file is missing, the game silently skips that item — an elder must never see a broken-image placeholder.
+2. **Downloads land in `tmp/` and move into place only after a complete write.** A partial download must never be visible to `ContentPuller`.
+3. **Memo files are retained until the server confirms upload.** Delete only after the DB row insert succeeds.
+
+Budget ~300MB total. Check free space before the pairing download and fail with a clear caregiver-facing message if insufficient.
+
+---
+
+## 6. Auth and pairing
+
+### The principle
+
+**Three entry paths, one exit state.** However pairing happens, the tablet ends identically: signed in as a device identity whose JWT carries `app_metadata.patient_id`, with `patientId` and `langCode` in config, holding **no caregiver credentials**.
+
+```
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│  Scan QR    │  │ Enter code  │  │  Sign in    │
+│  camera     │  │  8 chars    │  │ phone + OTP │
+└──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+       └────────┬───────┘                │
+        same token mechanism      caregiver session
+                │                 → patient picker
+                │                 → confirm screen
+                └────────┬────────────────┘
+                         ▼
+        Edge Function returns { refresh_token, patient_id, lang_code }
+                         ▼
+        supabase.auth.setSession(refreshToken)
+                         ▼
+        content download → health check → consent → home
+```
+
+### Path A & B — token and code
+
+QR encodes the same token a pairing code represents. One redemption call, two input methods.
+
+```dart
+Future<void> pairWithToken(String token) async {
+  final res = await Supabase.instance.client.functions.invoke(
+    'redeem-pairing-token',
+    body: {'token': token.toUpperCase().replaceAll('-', '')},
+  );
+  await _completePairing(res.data);
+}
+```
+
+**Code format:** 8 characters from `ABCDEFGHJKLMNPQRSTUVWXYZ2345679` — no I, O, 0, 1, 8, B, since those get misread over the phone. Display grouped: `SMRT-K4PQ`.
+
+**Code entry UI:** eight large boxes, on-screen keypad restricted to the valid alphabet, auto-advance, auto-uppercase. Caregiver register — normal density, 16sp, not elder styling.
+
+The code path is the most robust of the three because it works over a voice call: Bina in Imphal reads eight characters to whoever is holding the tablet in the village. No camera, no shared room, no OTP delivery to the tablet. **Use this path for the demo.**
+
+### Path C — caregiver login
+
+```dart
+Future<List<PatientSummary>> signInCaregiver(String phone, String otp) async {
+  await Supabase.instance.client.auth.verifyOTP(
+    phone: phone, token: otp, type: OtpType.sms,
+  );
+  final rows = await Supabase.instance.client
+      .from('patient_members')
+      .select('patient_id, patients(id, display_name, lang_code)')
+      .eq('role', 'caregiver');
+  return rows.map(PatientSummary.fromJson).toList();
+}
+
+Future<void> pairViaLogin(String patientId) async {
+  final res = await Supabase.instance.client.functions.invoke(
+    'pair-device-authenticated',
+    body: {'patient_id': patientId},
+  );
+
+  await Supabase.instance.client.auth.signOut();          // ★ caregiver gone
+  await _completePairing(res.data);                       // device session only
+}
+```
+
+**The `signOut()` is not optional.** The tablet sits unattended in a village home, potentially for years. If it retained a caregiver session, anyone with physical access would reach the full account. The Edge Function verifies caregiver membership server-side before minting anything.
+
+If the caregiver manages more than one patient, show a picker, then a confirmation screen:
+
+```
+┌──────────────────────────────────────────┐
+│  Set up this tablet for Ibemhal Devi?    │
+│                                          │
+│  This will download her photos and       │
+│  voice recordings, set up her medicine   │
+│  reminders, and lock the tablet into     │
+│  Smriti.                                 │
+│                                          │
+│  ⚠ If another tablet is already set up   │
+│    for Ibemhal, it will stop working.    │
+│                                          │
+│  [ Yes, set it up ]      [ Cancel ]      │
+└──────────────────────────────────────────┘
+```
+
+### Completing pairing
+
+```dart
+Future<void> _completePairing(Map data) async {
+  await Supabase.instance.client.auth.setSession(data['refresh_token']);
+
+  await _config.setAll({
+    'patientId': data['patient_id'],
+    'deviceUserId': data['device_user_id'],
+    'langCode': data['lang_code'],
+    'elderName': data['elder_name'],
+    'age': data['age'].toString(),
+    'educationYears': data['education_years'].toString(),
+  });
+
+  await _abilityRepo.seedAll(data['age'], data['education_years']);
+}
+```
+
+The SDK refreshes the access token automatically from here on. You do not manage tokens.
+
+### Device replacement
+
+One patient, one active device — two tablets would mean two SQLite databases both claiming to be the source of truth, and there is no sane merge. The server enforces this and revokes the old device.
+
+Handle the revoked case gracefully: on a 401, show a caregiver-facing "this tablet is no longer active" screen. **Do not delete local data** — if the re-pair was a mistake, the events are still recoverable.
+
+### Auth loss
+
+If `currentSession` is ever null after pairing, **the elder app keeps working completely.** Games, reminders, photos, everything. Only sync stops. Show nothing to the elder; surface it in the hidden diagnostics screen only.
+
+---
+
+## 7. Sync engine
+
+### Orchestrator
+
+```dart
+class SyncEngine {
+  static const _minInterval = Duration(minutes: 2);
+  DateTime? _lastRun;
+  bool _running = false;
+
+  Future<SyncResult> run({SyncTrigger trigger = SyncTrigger.periodic}) async {
+    if (_running) return SyncResult.skipped('already running');
+    if (_lastRun != null &&
+        DateTime.now().difference(_lastRun!) < _minInterval &&
+        trigger != SyncTrigger.manual) {
+      return SyncResult.skipped('throttled');
+    }
+    if (!await _hasConnection()) return SyncResult.skipped('offline');
+    if (Supabase.instance.client.auth.currentSession == null) {
+      return SyncResult.skipped('not authed');
+    }
+
+    _running = true;
+    final errors = <String>[];
+
+    // Events first — they're the data we cannot regenerate.
+    try { await _eventPusher.push(); }        catch (e) { errors.add('events: $e'); }
+    try { await _escalationWriter.flush(); }  catch (e) { errors.add('escalations: $e'); }
+    try { await _memoUploader.upload(); }     catch (e) { errors.add('memos: $e'); }
+    try { await _contentPuller.pull(); }      catch (e) { errors.add('content: $e'); }
+    try { await _heartbeat(); }               catch (e) { errors.add('heartbeat: $e'); }
+
+    await _config.set('lastSyncAt', nowMs.toString());
+    await _config.set('lastSyncError', errors.join(' | '));
+
+    _lastRun = DateTime.now();
+    _running = false;
+    return errors.isEmpty ? SyncResult.ok() : SyncResult.partial(errors);
+  }
+}
+```
+
+**Each stage is independently wrapped.** A content-pull failure must never prevent event upload.
+
+### Triggers
+
+```dart
+// 1. connectivity regained
+Connectivity().onConnectivityChanged.listen((r) {
+  if (r != ConnectivityResult.none) _sync.run(trigger: SyncTrigger.connectivity);
+});
+
+// 2. every 15 min, survives app kill
+Workmanager().registerPeriodicTask(
+  'smriti-sync', 'sync',
+  frequency: const Duration(minutes: 15),
+  constraints: Constraints(networkType: NetworkType.connected),
+  existingWorkPolicy: ExistingWorkPolicy.keep,
+);
+
+// 3. app foreground
+// 4. session end (immediate — caregiver should see today's play promptly)
+```
+
+### EventPusher
+
+This is where Supabase is a real improvement. One HTTP request instead of a 400-document batch protocol — which matters on a 2G connection in a village.
+
+```dart
+class EventPusher {
+  static const _batchSize = 500;
+
+  Future<void> push() async {
+    final pid = await _config.get('patientId');
+    final sb = Supabase.instance.client;
+
+    for (final spec in _tableSpecs) {          // trials, sessions, reminderEvents
+      while (true) {
+        final rows = await spec.unsynced(limit: _batchSize);
+        if (rows.isEmpty) break;
+
+        await sb.from(spec.remoteTable).upsert(
+          rows.map((r) => {...r.toRemoteJson(), 'patient_id': pid}).toList(),
+          onConflict: 'id',
+          ignoreDuplicates: true,     // ← idempotency, enforced by PK constraint
+        );
+
+        await spec.markSynced(rows.map((r) => r.id).toList());
+        if (rows.length < _batchSize) break;
+      }
+    }
+  }
+}
+```
+
+**Why this is safe with no retry bookkeeping:** the primary key is the client UUID and `ignoreDuplicates` maps to `ON CONFLICT DO NOTHING`. If the request succeeds but the local `synced` write fails (app killed mid-operation), the next sync re-sends and Postgres discards the duplicates. Idempotency by database constraint, not by application logic.
+
+**Never delete local events after upload.** Storage is cheap; a re-pair or backend problem should not lose history.
+
+### ContentPuller
+
+Order is critical. Get it wrong and the elder sees blank cards.
+
+```dart
+class ContentPuller {
+  Future<void> pull() async {
+    final pid = await _config.get('patientId');
+    final sb = Supabase.instance.client;
+
+    // 1. cheap version check — don't pull the payload every 15 min
+    final head = await sb.from('patients')
+        .select('content_version').eq('id', pid).single();
+    final remoteVersion = head['content_version'] as int;
+    final localVersion = await _config.getInt('contentVersion') ?? 0;
+    if (remoteVersion <= localVersion) return;
+
+    // 2. full payload in one RPC call
+    final content = await sb.rpc('get_patient_content',
+        params: {'p_patient_id': pid}) as Map<String, dynamic>;
+
+    // 3. download all new media to tmp/, verify, move into place
+    final media = await _mediaDownloader.fetchAll(content);
+    if (!media.allPresent) {
+      throw SyncException('media incomplete — keeping v$localVersion');
+    }
+
+    // 4. atomic DB swap
+    await _db.transaction(() async {
+      await _db.delete(_db.people).go();
+      await _db.batch((b) => b.insertAll(_db.people, media.people));
+      await _db.delete(_db.medications).go();
+      await _db.batch((b) => b.insertAll(_db.medications, media.medications));
+      await _db.delete(_db.routineItems).go();
+      await _db.batch((b) => b.insertAll(_db.routineItems, media.routine));
+
+      await _config.setInTx('contentVersion', '$remoteVersion');
+      await _config.setInTx('ladderConfigJson', jsonEncode(content['escalation']));
+      await _config.setInTx('primaryContactPhone',
+          content['escalation']['primary_phone']);
+      await _config.setInTx('secondaryContactPhone',
+          content['escalation']['secondary_phone']);
+    });
+
+    // 5. medication times may have changed → reschedule everything
+    await _alarmScheduler.rescheduleAll();
+
+    // 6. language pack, if bumped
+    final lp = content['lang_pack_version'] as int? ?? 0;
+    if (lp > (await _config.getInt('langPackVersion') ?? 0)) {
+      await _mediaDownloader.fetchLanguagePack(await _config.get('langCode'), lp);
+      await _config.set('langPackVersion', '$lp');
+    }
+  }
+}
+```
+
+**Media before rows before alarms.** If a download fails halfway, the tablet keeps its old, fully-working content. `contentVersion` bumps only after everything is verified on disk.
+
+**Rescheduling alarms after a content pull is mandatory.** The bandit changes `chosenTimeMin` server-side; skip the reschedule and reminders fire at the old time forever.
+
+### MediaDownloader
+
+```dart
+Future<void> _download(String bucket, String remotePath, String destPath) async {
+  final tmp = File('${await _paths.tmpDir}/${_hash(remotePath)}');
+
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      final bytes = await Supabase.instance.client
+          .storage.from(bucket).download(remotePath);
+      await tmp.writeAsBytes(bytes, flush: true);
+      await tmp.rename(destPath);          // atomic on same filesystem
+      return;
+    } catch (e) {
+      if (attempt == 2) rethrow;
+      await Future.delayed(Duration(seconds: 2 << attempt));
+    }
+  }
+}
+```
+
+Skip files already present with a matching size. Language pack files are individually retried and individually skippable — one missing phrase falls back to TTS rather than failing the whole pull.
+
+**Buckets:** `patient-media` (photos, caregiver voice — private), `patient-memos` (elder recordings — private), `lang-packs` (shared, read-only).
+
+### MemoUploader
+
+```dart
+Future<void> upload() async {
+  final pid = await _config.get('patientId');
+  final sb = Supabase.instance.client;
+
+  for (final memo in await _memoRepo.pendingUploads()) {
+    final file = File(memo.localPath);
+    if (!await file.exists()) {
+      await _memoRepo.markUploaded(memo.id);   // orphan row, clear it
+      continue;
+    }
+
+    final remotePath = '$pid/${memo.id}.m4a';
+    await sb.storage.from('patient-memos').upload(remotePath, file);
+
+    await sb.from('memos').upsert({
+      'id': memo.id,
+      'patient_id': pid,
+      'storage_path': remotePath,
+      'duration_ms': memo.durationMs,
+      'recorded_at': memo.recordedAt,
+      'context_tag': memo.contextTag,
+    }, onConflict: 'id', ignoreDuplicates: true);
+
+    await _memoRepo.markUploaded(memo.id);
+    // local file retained — never delete
+  }
+}
+```
+
+Storage first, row second. A DB row pointing at a nonexistent file is worse than a file with no row.
+
+### Heartbeat
+
+```dart
+await Supabase.instance.client.rpc('device_heartbeat', params: {
+  'p_patient_id': pid,
+  'p_app_version': packageInfo.version,
+  'p_pending_events': await _eventRepo.unsyncedCount(),
+  'p_device_time_ms': nowMs,
+});
+```
+
+The RPC compares device time to server time and stores skew. The caregiver dashboard shows an honest "last synced 4 hours ago" — never imply live data.
+
+**The server also runs a watchdog** that independently detects when a device has gone quiet or a dose was never reported. You don't build that, but know it exists: it's the safety net for when alarms fail or the tablet is dead, and it means the phone-call escalation still happens even if your app never writes an escalation request.
+
+---
+
+## 8. Reminders
+
+**This is the highest-risk component in the app.** If reminders don't fire, the product is broken regardless of how good everything else is. Allocate three full days. Test on real hardware daily.
+
+### Scheduling
+
+```dart
+class AlarmScheduler {
+  int _alarmId(String medId, int dayOfWeek) =>
+      (medId.hashCode & 0x00FFFFFF) * 10 + dayOfWeek;
+
+  Future<void> rescheduleAll() async {
+    final meds = await _contentRepo.activeMedications();
+
+    for (final med in meds) {
+      for (final day in med.daysOfWeekList) {
+        await AndroidAlarmManager.cancel(_alarmId(med.id, day));
+      }
+    }
+
+    for (final med in meds) {
+      for (final day in med.daysOfWeekList) {
+        await AndroidAlarmManager.oneShotAt(
+          _nextOccurrence(day, med.chosenTimeMin),
+          _alarmId(med.id, day),
+          fireReminderCallback,            // top-level function
+          exact: true,
+          wakeup: true,
+          allowWhileIdle: true,            // survives Doze
+          rescheduleOnReboot: true,
+          params: {'medicationId': med.id, 'dayOfWeek': day},
+        );
+      }
+    }
+  }
+}
+```
+
+Call `rescheduleAll()` after: pairing completes, every content pull that bumps version, device boot, and app foreground if the last reschedule was over 24h ago.
+
+### The isolate constraint — read this twice
+
+**`AndroidAlarmManager` callbacks run in a separate isolate** with no access to the main isolate's memory. Not the Riverpod container, not the Drift instance, not any singleton, not any static you set in `main()`.
+
+```dart
+@pragma('vm:entry-point')
+Future<void> fireReminderCallback(int id, Map<String, dynamic> params) async {
+  // MANDATORY in a background isolate
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+
+  // Open a SEPARATE DB connection. Do not reference any existing instance.
+  final db = SmritiDatabase(await openConnectionForIsolate());
+  final medId = params['medicationId'] as String;
+  final med = await db.getMedication(medId);
+  if (med == null || !med.active) return;
+
+  final reminderEventId = const Uuid().v4();
+  await db.insertReminderEvent(ReminderEventsCompanion.insert(
+    id: reminderEventId,
+    medicationId: medId,
+    scheduledAt: DateTime.now().millisecondsSinceEpoch,
+    firedAt: Value(DateTime.now().millisecondsSinceEpoch),
+    channel: 'in_app',
+    ladderStep: 0,
+  ));
+
+  await _showFullScreenNotification(reminderEventId, med);
+  await _playCaregiverAudio(med.voicePath);
+
+  await _scheduleLadderStep(reminderEventId, medId, step: 1, delayMin: 15);
+  await _scheduleLadderStep(reminderEventId, medId, step: 2, delayMin: 30);
+
+  await _scheduleNextOccurrence(med, params['dayOfWeek'] as int);  // oneShotAt does NOT repeat
+  await db.close();
+}
+```
+
+`@pragma('vm:entry-point')` and both `ensureInitialized()` calls are required. Omitting any produces failures that only appear in release builds.
+
+### Manifest
+
+```xml
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+<uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+<uses-permission android:name="android.permission.WAKE_LOCK"/>
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+<uses-permission android:name="android.permission.CALL_PHONE"/>
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+<activity
+  android:name=".MainActivity"
+  android:screenOrientation="landscape"
+  android:launchMode="singleTop"
+  android:showWhenLocked="true"
+  android:turnScreenOn="true"
+  android:exported="true"/>
+```
+
+`showWhenLocked` and `turnScreenOn` are what let the reminder appear over a locked screen. Without them it fires into a black screen.
+
+### Notification details
+
+```dart
+AndroidNotificationDetails(
+  'smriti_reminders', 'Medicine Reminders',
+  importance: Importance.max,
+  priority: Priority.max,
+  fullScreenIntent: true,
+  category: AndroidNotificationCategory.alarm,
+  ongoing: true,
+  autoCancel: false,
+  playSound: false,          // we play the caregiver's own recording
+)
+```
+
+### The ladder
+
+| Step | When | Channel | Owner |
+|---|---|---|---|
+| 0 | T+0 | Full-screen, caregiver's recorded audio, pill photo | **Device** |
+| 1 | T+15m | Repeat, louder, chime first | **Device** |
+| 2 | T+30m | Write escalation → phone call | Device writes, backend acts |
+| 3 | T+50m | Second call | Backend |
+| 4 | T+75m | SMS to primary contact | Backend |
+| 5 | T+3h | SMS to secondary | Backend |
+
+Steps 0 and 1 are pure on-device and work with zero connectivity — the common case, and why the ladder starts locally.
+
+```dart
+Future<void> confirmTaken(String reminderEventId) async {
+  await _db.updateReminderOutcome(reminderEventId,
+      outcome: 'confirmed', respondedAt: nowMs);
+
+  await AndroidAlarmManager.cancel(_ladderAlarmId(reminderEventId, 1));
+  await AndroidAlarmManager.cancel(_ladderAlarmId(reminderEventId, 2));
+  await _db.cancelPendingEscalations(reminderEventId);
+  await _notifications.cancel(_notifId(reminderEventId));
+
+  unawaited(_sync.run(trigger: SyncTrigger.manual));
+}
+```
+
+### EscalationWriter
+
+```dart
+Future<void> requestEscalation(String reminderEventId, String medId, int step) async {
+  final id = '${reminderEventId}_$step';       // deterministic → no double-call
+  await _db.insertEscalationRequest(
+      id: id, reminderEventId: reminderEventId,
+      medicationId: medId, step: step, requestedAt: nowMs);
+  unawaited(_sync.run(trigger: SyncTrigger.manual));
+}
+
+Future<void> flush() async {
+  final pid = await _config.get('patientId');
+  for (final req in await _db.unsyncedEscalations()) {
+    if (req.cancelled) { await _db.markEscalationSynced(req.id); continue; }
+
+    // last-moment local check — elder may have confirmed since queueing
+    final ev = await _db.getReminderEvent(req.reminderEventId);
+    if (ev?.outcome == 'confirmed') {
+      await _db.markEscalationSynced(req.id);
+      continue;
+    }
+
+    await Supabase.instance.client.from('escalations').upsert({
+      'id': req.id,
+      'patient_id': pid,
+      'reminder_event_id': req.reminderEventId,
+      'medication_id': req.medicationId,
+      'step': req.step,
+      'status': 'requested',
+      'requested_at': req.requestedAt,
+    }, onConflict: 'id', ignoreDuplicates: true);
+
+    await _db.markEscalationSynced(req.id);
+  }
+}
+```
+
+**Known and intentional:** if the elder confirms while offline and stays offline past T+30, the escalation uploads later and a call may be placed for a dose already taken. The backend re-checks before dialing, which catches most cases. A redundant call costs a rupee; a missed dose costs more.
+
+### Setup health check
+
+Runs during pairing with the caregiver present. **This protects the entire product.**
+
+```dart
+Future<HealthCheckReport> run() async {
+  final r = <String, bool>{};
+
+  r['exactAlarm']    = await Permission.scheduleExactAlarm.request().isGranted;
+  r['notifications'] = await Permission.notification.request().isGranted;
+  r['batteryExempt'] = await Permission.ignoreBatteryOptimizations.request().isGranted;
+  r['microphone']    = await Permission.microphone.request().isGranted;
+
+  final mfr = (await DeviceInfoPlugin().androidInfo).manufacturer.toLowerCase();
+  if (_oemNeedsAutostart(mfr)) {
+    r['autostartGuideShown'] = await _openAutostartSettings(mfr);
+  }
+
+  // THE ACTUAL TEST — permissions granted ≠ alarms fire
+  await _scheduleTestAlarm(delay: const Duration(seconds: 60));
+  r['testAlarmFired'] = await _awaitConfirmation(timeout: const Duration(minutes: 3));
+
+  return HealthCheckReport(r);
+}
+```
+
+OEM autostart intents — **wrap every one in try/catch**, activity names vary by ROM and will throw:
+
+| Manufacturer | Intent |
+|---|---|
+| Xiaomi | `miui.intent.action.OP_AUTO_START` |
+| Oppo / Realme | `com.coloros.safecenter/.startupapp.StartupAppListActivity` |
+| Vivo | `com.vivo.permissionmanager/.activity.BgStartUpManagerActivity` |
+| Huawei / Honor | `com.huawei.systemmanager/.startupmgr.ui.StartupNormalAppListActivity` |
+| Samsung | `com.samsung.android.lool/.battery.ui.BatteryActivity` |
+
+Fall back to generic app settings on failure.
+
+**The live test is the part that matters.** Granted permissions do not mean alarms fire — OEM battery managers kill background work regardless. Fire a real alarm and make the caregiver confirm they saw it.
+
+---
+
+## 9. Ability estimator
+
+Pure Dart. No I/O, no async, no dependencies. Fully unit-testable.
+
+```dart
+enum CognitiveDomain { memory, attention, executive, visuospatial, language }
+
+class AbilityEstimator {
+  static const double targetP = 0.78;
+  static const double kMax = 0.40, kMin = 0.08, tau = 60.0;
+  static const double rtAlpha = 0.1;
+
+  static AbilityRecord seed(int age, int educationYears) {
+    final theta = 0.35 * (educationYears - 8) / 4.0
+                - 0.30 * (age - 70) / 10.0;
+    return AbilityRecord(
+      theta: theta.clamp(-2.0, 2.0),
+      nTrials: 0, rtMeanLog: log(4000), rtVar: 0.25,
+    );
+  }
+
+  static AbilityRecord update(
+      AbilityRecord s, double itemDifficulty, bool correct, int rtMs) {
+    final p = 1.0 / (1.0 + exp(-(s.theta - itemDifficulty)));
+    final k = kMin + (kMax - kMin) * exp(-s.nTrials / tau);
+    final theta = s.theta + k * ((correct ? 1.0 : 0.0) - p);
+
+    final lrt = log(rtMs.clamp(200, 30000).toDouble());
+    final mean = s.rtMeanLog + rtAlpha * (lrt - s.rtMeanLog);
+    final variance = s.rtVar + rtAlpha * (pow(lrt - mean, 2) - s.rtVar);
+
+    return AbilityRecord(
+      theta: theta.clamp(-4.0, 4.0),
+      nTrials: s.nTrials + 1,
+      rtMeanLog: mean, rtVar: variance,
+    );
+  }
+
+  static double nextDifficulty(double theta) =>
+      theta - log(targetP / (1 - targetP));   // ≈ theta − 1.266
+}
+```
+
+Five independent instances, one per domain. Seeded at pairing from age and education.
+
+**Write this test before any UI:**
+
+```dart
+test('theta converges to true ability', () {
+  const trueTheta = 1.2;
+  var s = AbilityEstimator.seed(76, 8);
+  final rng = Random(42);
+
+  for (var i = 0; i < 200; i++) {
+    final b = AbilityEstimator.nextDifficulty(s.theta);
+    final p = 1.0 / (1.0 + exp(-(trueTheta - b)));
+    s = AbilityEstimator.update(s, b, rng.nextDouble() < p, 3000);
+  }
+  expect((s.theta - trueTheta).abs(), lessThan(0.3));
+});
+
+test('observed success rate lands near target', () {
+  // 500 trials → accuracy in [0.72, 0.84]
+});
+```
+
+If these pass, the core cognitive claim of the product is sound. If not, nothing downstream means anything.
+
+---
+
+## 10. Session write path
+
+```dart
+Future<void> onTrialComplete({
+  required TrialResult t,
+  required String gameId,
+  required CognitiveDomain domain,
+  required String itemId,
+  required int trialIndex,
+}) async {
+  final ability = await _abilityRepo.get(domain);    // SQLite, instant
+
+  await _eventRepo.insertTrial(TrialEventsCompanion.insert(
+    id: const Uuid().v4(),
+    sessionId: _sessionId,
+    gameId: gameId,
+    domain: domain.name,
+    itemId: itemId,
+    itemDifficulty: t.itemDifficulty,
+    thetaBefore: ability.theta,
+    correct: t.correct,
+    initiationMs: t.initiationMs,
+    movementMs: t.movementMs,
+    responseTimeMs: t.initiationMs + t.movementMs,
+    chosenId: Value(t.chosenId),
+    errorClass: Value(t.errorClass?.name),
+    trialIndex: trialIndex,
+    trialContext: Value(t.context?.name),
+    hintLevel: Value(t.hintLevel),
+    metrics: Value(t.metrics == null ? null : jsonEncode(t.metrics)),
+    ts: nowMs,
+    hourOfDay: DateTime.now().hour,
+    tzOffsetMin: DateTime.now().timeZoneOffset.inMinutes,
+  ));
+
+  final updated = AbilityEstimator.update(
+      ability, t.itemDifficulty, t.correct, t.initiationMs + t.movementMs);
+  await _abilityRepo.put(domain, updated);
+}
+```
+
+Sub-millisecond. No network. No `await` on anything remote. **This exact pattern is why the app works offline.**
+
+### What each game must supply
+
+| Game | `itemId` | `errorClass` when wrong | `metrics` |
+|---|---|---|---|
+| Faces of My Family | `personId` | `semantic` if a relative, `random` otherwise | — |
+| Market Basket | hash of the item set | `omission` \| `random` | `{"span_achieved": n}` |
+| Sort the Harvest | `ruleId_itemId` | `perseverative` if old rule | `{"switch_cost_ms": n}` |
+| Trace the Path | `pathId` | `random` | `{"stroke_velocity": n, "lifts": n, "jitter": n}` |
+| My Day | `questionId` | `random` | — |
+| Sounds of Home | `soundId` | `semantic` if same category | — |
+| Name the Harvest | `categoryId` | — | `{"items_named": n, "audio_path": "..."}` |
+
+Also increment `Sessions.demoReplays` each time the ghost-hand demo is replayed.
+
+**Why this granularity matters:** `itemId` is what turns Faces of My Family from a memory score into a per-person recognition trajectory — the ability to see that she's losing her nephew before her daughter. `errorClass` distinguishes "picked her sister" (semantic memory intact, identity lost) from "picked a stranger." `initiationMs` split from `movementMs` separates executive initiation from motor speed. None of this can be reconstructed later.
+
+At session end: mark complete, then fire one opportunistic sync.
+
+---
+
+## 11. Clock skew
+
+Tablets in villages have wrong clocks. Handle it rather than hoping.
+
+- Every event carries `ts` (device time) and `tzOffsetMin`
+- The heartbeat RPC compares device time to server time and returns skew
+- Store `clockSkewMs` in config; the server uses its own timestamps for daily bucketing when skew is large
+
+Never attempt to correct the clock. Never show a warning to the elder. Diagnostics only.
+
+---
+
+## 12. Diagnostics screen
+
+Hidden behind the kiosk exit (long-press top-left 5s → PIN). **Caregiver register — normal density, 16sp, information-dense. Never styled like the elder app.**
+
+Shows: patient ID, device user ID, content version, lang pack version, last sync time and error, pending event count, auth status, clock skew, health check results with re-run, next 5 scheduled alarms with fire times.
+
+Buttons: manual sync, manual reschedule, **"Fire test reminder now."** That last one is the single most useful debugging control you will build.
+
+---
+
+## 13. Testing
+
+**Unit**
+- `AbilityEstimator` convergence and success-rate targeting (§9)
+- Ladder state machine — every path including confirm at each step
+- Escalation ID determinism: same input → same ID
+- Content version comparison logic
+
+**Integration (local Supabase via `supabase start`)**
+- Full session → events in SQLite → push → verify rows in Postgres
+- Push the same batch twice → assert no duplicates
+- Content version bump → media downloaded → rows swapped → alarms rescheduled
+- Media download failure mid-pull → version NOT bumped → old content intact
+
+**Manual, on a real budget Android device — the set that actually matters**
+
+| Test | Passes when |
+|---|---|
+| Reminder fires with app killed | Full-screen appears, caregiver audio plays |
+| Reminder fires with screen off, overnight in Doze | Fires within 60s of scheduled time |
+| Reminder fires after reboot | Alarms restored |
+| Reminder fires on Xiaomi/Oppo/Vivo after health check | Reliable across 3 consecutive days |
+| **48h airplane mode** | Play, confirm reminders, browse photos — all work; reconnect → everything syncs |
+| Kill app mid-sync | Next sync completes, no duplicates |
+| Content update while offline | Applied on next connection, alarms rescheduled |
+| Storage full | Graceful caregiver message, no crash |
+| Kiosk escape attempts | No button combination exits |
+
+Run the 48-hour airplane test at least twice before finals, including once on the actual demo device.
+
+---
+
+## 14. Build order
+
+Strict. Do not parallelize past step 4.
+
+| # | Task | Days | Milestone |
+|---|---|---|---|
+| 1 | Drift schema **with all 6 new columns**, DAOs, repos | 1.5 | DB reads/writes in tests |
+| 2 | `AbilityEstimator` + convergence tests | 0.5 | Tests green |
+| 3 | File path service, tmp→final move | 0.5 | Paths resolve |
+| 4 | Session write path + mock content JSON | 1 | Trials persist, θ updates, no network |
+| 5 | **Alarm scheduler + isolate + full-screen reminder** | 2 | **Fires with app killed on real device** |
+| 6 | Ladder state machine, local steps 0–1 | 1 | Confirm cancels downstream |
+| 7 | Health check + OEM intents | 1 | Test alarm confirmed on a Xiaomi |
+| 8 | Supabase init, three pairing paths | 1.5 | Device session established |
+| 9 | EventPusher | 0.5 | Rows in Postgres, idempotent on retry |
+| 10 | ContentPuller + MediaDownloader | 1.5 | Version bump applies safely |
+| 11 | MemoUploader, EscalationWriter, heartbeat | 1 | Full sync loop |
+| 12 | Diagnostics screen | 0.5 | Test-reminder button works |
+| 13 | **48h airplane-mode test** | — | Everything works, syncs on reconnect |
+
+**Steps 1–7 need no backend at all.** Build against mock JSON from day one; you are never blocked.
+
+---
+
+## 15. What you need from the backend
+
+Contract to mock against. Ask the backend dev for these four things.
+
+**Edge Functions**
+
+```
+POST /functions/v1/redeem-pairing-token
+  body: { token: "SMRTK4PQ" }
+  → { refresh_token, patient_id, device_user_id, lang_code,
+      elder_name, age, education_years }
+
+POST /functions/v1/pair-device-authenticated     [caregiver JWT required]
+  body: { patient_id }
+  → same shape
+```
+
+**RPCs**
+
+```sql
+get_patient_content(p_patient_id uuid) → json
+-- { version, lang_code, lang_pack_version,
+--   people: [...], medications: [...], routine: [...],
+--   escalation: { steps, primary_name, primary_phone,
+--                 secondary_name, secondary_phone } }
+
+device_heartbeat(p_patient_id, p_app_version, p_pending_events, p_device_time_ms)
+  → { server_time_ms, clock_skew_ms }
+```
+
+**Tables the device writes** (insert-only, PK is your client UUID): `events`, `sessions`, `reminder_events`, `memos`, `escalations`
+
+**Tables the device reads**: `patients` (`content_version` only)
+
+**Storage buckets**: `patient-media`, `patient-memos`, `lang-packs`
+
+---
+
+## 16. Non-negotiables
+
+1. **No file outside `lib/core/sync/` and `lib/core/auth/` imports `supabase_flutter`.** CI grep.
+2. **SQLite is the only cache.** No second source of truth.
+3. **Event tables are INSERT-only.** The only permitted UPDATE is the `synced` flag.
+4. **All event, session, memo IDs are client-generated UUID v4.**
+5. **All uploads use `onConflict: 'id', ignoreDuplicates: true`.**
+6. **No network fetch at runtime.** All media read from local disk.
+7. **Content pull order: media → verify → DB rows → reschedule alarms.** Never bump `contentVersion` before media is verified on disk.
+8. **Alarm callbacks are top-level, `@pragma('vm:entry-point')`, and open their own DB connection.**
+9. **Escalation IDs are `{reminderEventId}_{step}`, always.**
+10. **Every sync stage is independently try/caught.** One failure never aborts the rest.
+11. **After login-based pairing, `signOut()` the caregiver before establishing the device session.**
+12. **Nothing about connectivity, sync, battery, or errors is ever shown to the elder.** Diagnostics are caregiver-only.
+13. **Test on real budget hardware, not an emulator.** Every reminder change gets a real-device pass.

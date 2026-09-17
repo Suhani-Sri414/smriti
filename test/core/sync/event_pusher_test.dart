@@ -20,10 +20,16 @@ void main() {
 
   tearDown(() async => db.close());
 
-  Future<void> seedSession({String id = 'ses-1'}) => eventRepo.insertSession(
+  Future<void> seedSession({
+    String id = 'ses-1',
+    int startedAt = 1757199000000,
+    int? endedAt = 1757199100000,
+  }) =>
+      eventRepo.insertSession(
         SessionsCompanion.insert(
           id: id,
-          startedAt: 1757199000000,
+          startedAt: startedAt,
+          endedAt: Value(endedAt),
           gameIds: 'market_basket',
         ),
       );
@@ -43,7 +49,7 @@ void main() {
           movementMs: 1400,
           responseTimeMs: 2300,
           chosenId: const Value('rice'),
-          errorClass: const Value('semantic_near'),
+          errorClass: const Value('semantic'),
           trialIndex: 0,
           trialContext: const Value('{"listLength":3}'),
           hintLevel: const Value(1),
@@ -101,7 +107,7 @@ void main() {
     expect(trial['movement_ms'], 1400);
     expect(trial['response_time_ms'], 2300);
     expect(trial['chosen_id'], 'rice');
-    expect(trial['error_class'], 'semantic_near');
+    expect(trial['error_class'], 'semantic');
     expect(trial['trial_index'], 0);
     // trial_context is a `text` column: the encoded string is the value.
     expect(trial['trial_context'], '{"listLength":3}');
@@ -122,7 +128,8 @@ void main() {
 
     final reminder = gateway.rowsFor('reminder_events').single;
     expect(reminder['medication_id'], 'med-1');
-    expect(reminder['outcome'], 'taken');
+    // Normalized to backend check constraint vocabulary: 'taken' -> 'confirmed'
+    expect(reminder['outcome'], 'confirmed');
     expect(reminder['ladder_step'], 0);
 
     // Nothing is left queued.
@@ -134,7 +141,7 @@ void main() {
 
   test('every timestamp goes up as an epoch-ms int, matching bigint columns',
       () async {
-    await seedSession();
+    await seedSession(endedAt: null);
     await seedTrial();
     await eventRepo.insertReminderEvent(
       ReminderEventsCompanion.insert(
@@ -143,6 +150,7 @@ void main() {
         scheduledAt: 1757200000000,
         firedAt: const Value(1757200005000),
         respondedAt: const Value(1757200060000),
+        outcome: const Value('confirmed'),
         channel: 'fullscreen',
         ladderStep: 0,
       ),
@@ -363,6 +371,213 @@ void main() {
       expect(await writer.flush(), 1);
       expect(await writer.flush(), 0);
       expect(gateway.rowsFor('escalations'), hasLength(1));
+    });
+  });
+
+  group('Pipeline robustness & backend compatibility', () {
+    test('normalizes reminder outcomes to backend vocabulary', () async {
+      await eventRepo.insertReminderEvent(
+        ReminderEventsCompanion.insert(
+          id: 'rem-taken',
+          medicationId: 'med-1',
+          scheduledAt: 1757200000000,
+          outcome: const Value('taken'),
+          channel: 'fullscreen',
+          ladderStep: 0,
+        ),
+      );
+      await eventRepo.insertReminderEvent(
+        ReminderEventsCompanion.insert(
+          id: 'rem-snoozed',
+          medicationId: 'med-1',
+          scheduledAt: 1757200001000,
+          outcome: const Value('snoozed'),
+          channel: 'fullscreen',
+          ladderStep: 0,
+        ),
+      );
+
+      final gateway = FakeSyncGateway();
+      await EventPusher(
+        eventRepo: eventRepo,
+        configs: db.appConfigsDao,
+        gateway: gateway,
+      ).push();
+
+      final rows = gateway.rowsFor('reminder_events');
+      expect(rows, hasLength(2));
+      expect(rows.firstWhere((r) => r['id'] == 'rem-taken')['outcome'],
+          'confirmed');
+      expect(rows.firstWhere((r) => r['id'] == 'rem-snoozed')['outcome'],
+          'declined');
+    });
+
+    test('open sessions without endedAt are not pushed until closed', () async {
+      // Open session: started now, endedAt is null.
+      await eventRepo.insertSession(
+        SessionsCompanion.insert(
+          id: 'open-ses',
+          startedAt: DateTime.now().millisecondsSinceEpoch,
+          gameIds: 'market_basket',
+        ),
+      );
+
+      final gateway = FakeSyncGateway();
+      final pushed = await EventPusher(
+        eventRepo: eventRepo,
+        configs: db.appConfigsDao,
+        gateway: gateway,
+      ).push();
+
+      expect(pushed, 0);
+      expect(gateway.rowsFor('sessions'), isEmpty);
+
+      // Now close it
+      await eventRepo.endSession(
+        id: 'open-ses',
+        endedAt: DateTime.now().millisecondsSinceEpoch + 120000,
+        completed: true,
+      );
+
+      final pushedAfter = await EventPusher(
+        eventRepo: eventRepo,
+        configs: db.appConfigsDao,
+        gateway: gateway,
+      ).push();
+
+      expect(pushedAfter, 1);
+      expect(gateway.rowsFor('sessions'), hasLength(1));
+      expect(gateway.rowsFor('sessions').single['completed'], isTrue);
+    });
+
+    test('unanswered reminder events without outcome are not pushed prematurely',
+        () async {
+      // Alarm fired, but elder has not tapped taken/snoozed yet.
+      await eventRepo.insertReminderEvent(
+        ReminderEventsCompanion.insert(
+          id: 'rem-pending',
+          medicationId: 'med-1',
+          scheduledAt: DateTime.now().millisecondsSinceEpoch,
+          channel: 'in_app',
+          ladderStep: 0,
+        ),
+      );
+
+      final gateway = FakeSyncGateway();
+      final pushed = await EventPusher(
+        eventRepo: eventRepo,
+        configs: db.appConfigsDao,
+        gateway: gateway,
+      ).push();
+
+      expect(pushed, 0);
+      expect(gateway.rowsFor('reminder_events'), isEmpty);
+
+      // Elder takes medicine
+      await eventRepo.recordReminderOutcome(
+        id: 'rem-pending',
+        outcome: 'confirmed',
+        respondedAt: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      final pushedAfter = await EventPusher(
+        eventRepo: eventRepo,
+        configs: db.appConfigsDao,
+        gateway: gateway,
+      ).push();
+
+      expect(pushedAfter, 1);
+      expect(gateway.rowsFor('reminder_events'), hasLength(1));
+      expect(gateway.rowsFor('reminder_events').single['outcome'], 'confirmed');
+    });
+
+    test('failure in reminder push does not abort sessions and trials push',
+        () async {
+      await seedSession();
+      await seedTrial();
+      await eventRepo.insertReminderEvent(
+        ReminderEventsCompanion.insert(
+          id: 'rem-fail',
+          medicationId: 'med-1',
+          scheduledAt: 1757200000000,
+          outcome: const Value('confirmed'),
+          channel: 'fullscreen',
+          ladderStep: 0,
+        ),
+      );
+
+      final gateway = FakeSyncGateway(failUpsertOn: 'reminder_events');
+      final pusher = EventPusher(
+        eventRepo: eventRepo,
+        configs: db.appConfigsDao,
+        gateway: gateway,
+      );
+
+      await expectLater(pusher.push(), throwsA(isA<Exception>()));
+
+      // Sessions and trials made it through despite reminder failing.
+      expect(gateway.rowsFor('sessions'), hasLength(1));
+      expect(gateway.rowsFor('events'), hasLength(1));
+      expect(await eventRepo.unsyncedSessions(), isEmpty);
+      expect(await eventRepo.unsyncedTrials(), isEmpty);
+      // Reminders remain queued for next retry.
+      expect(await eventRepo.unsyncedReminderEvents(), hasLength(1));
+    });
+
+    test('dangling open sessions older than 6 minutes are closed and pushed',
+        () async {
+      final oldStartedAt =
+          DateTime.now().subtract(const Duration(minutes: 15)).millisecondsSinceEpoch;
+      await eventRepo.insertSession(
+        SessionsCompanion.insert(
+          id: 'dangling-ses',
+          startedAt: oldStartedAt,
+          gameIds: 'market_basket',
+        ),
+      );
+
+      final gateway = FakeSyncGateway();
+      final pushed = await EventPusher(
+        eventRepo: eventRepo,
+        configs: db.appConfigsDao,
+        gateway: gateway,
+      ).push();
+
+      expect(pushed, 1);
+      final row = gateway.rowsFor('sessions').single;
+      expect(row['id'], 'dangling-ses');
+      expect(row['completed'], isFalse);
+      expect(row['abandoned_at_ms'], const Duration(minutes: 6).inMilliseconds);
+      expect(row['ended_at'], isNotNull);
+      expect(await eventRepo.unsyncedCount(), 0);
+    });
+
+    test('dangling reminders older than 30 minutes are closed as no_response and pushed',
+        () async {
+      final oldScheduledAt =
+          DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch;
+      await eventRepo.insertReminderEvent(
+        ReminderEventsCompanion.insert(
+          id: 'dangling-rem',
+          medicationId: 'med-1',
+          scheduledAt: oldScheduledAt,
+          channel: 'in_app',
+          ladderStep: 0,
+        ),
+      );
+
+      final gateway = FakeSyncGateway();
+      final pushed = await EventPusher(
+        eventRepo: eventRepo,
+        configs: db.appConfigsDao,
+        gateway: gateway,
+      ).push();
+
+      expect(pushed, 1);
+      final row = gateway.rowsFor('reminder_events').single;
+      expect(row['id'], 'dangling-rem');
+      expect(row['outcome'], 'no_response');
+      expect(await eventRepo.unsyncedCount(), 0);
     });
   });
 }

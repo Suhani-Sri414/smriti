@@ -167,6 +167,9 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
   // SCREEN 15: MICROPHONE — LISTENING
   // ─────────────────────────────────────────────────────────────────────────
   Widget _buildListeningView() {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isCompactHeight = screenHeight < 500;
+
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -175,7 +178,7 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
           bottom: 0,
           left: 0,
           right: 0,
-          height: 380,
+          height: isCompactHeight ? 260 : 380,
           child: IgnorePointer(
             child: AnimatedBuilder(
               animation: _rippleController,
@@ -192,9 +195,12 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
 
         // Floating Prompt Pill in upper half
         Positioned(
-          top: 130,
+          top: isCompactHeight ? 52 : 130,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompactHeight ? 24 : 32,
+              vertical: isCompactHeight ? 12 : 18,
+            ),
             decoration: BoxDecoration(
               color: AppColors.raisedSurface,
               borderRadius: BorderRadius.circular(28),
@@ -225,11 +231,11 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Text(
+                    Text(
                       'Listening...',
-                      key: Key('voice_listening_title'),
+                      key: const Key('voice_listening_title'),
                       style: TextStyle(
-                        fontSize: 26,
+                        fontSize: isCompactHeight ? 22 : 26,
                         fontWeight: FontWeight.w800,
                         color: AppColors.primaryText,
                         fontFamily: 'Noto Sans',
@@ -238,10 +244,10 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'Say: Play, Today, My People, or Call',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: isCompactHeight ? 14 : 16,
                     fontWeight: FontWeight.w600,
                     color: AppColors.secondaryText,
                     fontFamily: 'Noto Sans',
@@ -260,8 +266,8 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
             behavior: HitTestBehavior.opaque,
             onTap: widget.onDismiss,
             child: Container(
-              width: 80,
-              height: 80,
+              width: isCompactHeight ? 64 : 80,
+              height: isCompactHeight ? 64 : 80,
               decoration: BoxDecoration(
                 color: AppColors.terracotta,
                 shape: BoxShape.circle,
@@ -277,10 +283,10 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
                   ),
                 ],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.mic_rounded,
-                size: 42,
-                color: Color(0xFFFFFDF8),
+                size: isCompactHeight ? 34 : 42,
+                color: const Color(0xFFFFFDF8),
               ),
             ),
           ),
@@ -294,29 +300,32 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
   // ─────────────────────────────────────────────────────────────────────────
   Widget _buildNoMatchView() {
     return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 740),
-        margin: const EdgeInsets.symmetric(horizontal: 28),
-        padding: const EdgeInsets.fromLTRB(32, 28, 32, 24),
-        decoration: BoxDecoration(
-          color: AppColors.raisedSurface,
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(
-            color: AppColors.border,
-            width: 2.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 28,
-              offset: const Offset(0, 12),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 740),
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+          decoration: BoxDecoration(
+            color: AppColors.raisedSurface,
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: AppColors.border,
+              width: 2.5,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 28,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
             // Friendly zero-shame prompt
             const Text(
               "I didn't catch that",
@@ -497,6 +506,7 @@ class _VoiceInteractionOverlayState extends State<VoiceInteractionOverlay>
           ],
         ),
       ),
+    ),
     );
   }
 

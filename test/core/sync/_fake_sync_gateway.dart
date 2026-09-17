@@ -29,7 +29,11 @@ class FakeSyncGateway implements SyncGateway {
   List<Map<String, dynamic>> rowsFor(String table) => upserts[table] ?? const [];
 
   @override
-  Future<void> upsert(String table, List<Map<String, dynamic>> rows) async {
+  Future<void> upsert(
+    String table,
+    List<Map<String, dynamic>> rows, {
+    bool ignoreDuplicates = true,
+  }) async {
     calls.add('upsert:$table');
     if (table == failUpsertOn) throw Exception('upsert failed for $table');
     upserts.putIfAbsent(table, () => []).addAll(rows);

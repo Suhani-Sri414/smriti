@@ -17,9 +17,11 @@ import 'package:smriti/core/repo/ability_repo.dart';
 import 'package:smriti/screens/pairing/code_entry_screen.dart';
 import 'package:smriti/screens/reminder_screen.dart';
 import 'package:smriti/screens/startup_gate.dart';
+import 'package:smriti/core/voice/screen_reader_service.dart';
 
 import '../core/auth/pairing_service_test.dart'
     show FakePairingGateway, successBody;
+import '../core/voice/screen_reader_service_test.dart' show FakeTtsAdapter;
 import '../core/repo/_test_db.dart';
 import '../core/reminders/_fake_alarm_api.dart';
 
@@ -242,6 +244,40 @@ void main() {
         find.text('No active medications — pull content first.'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('screen reader button reads aloud home instructions and toggles',
+        (tester) async {
+      final fakeTts = FakeTtsAdapter();
+      final screenReader = ScreenReaderService(ttsAdapter: fakeTts);
+      final services = AppServices(
+        database: db,
+        screenReaderService: screenReader,
+      );
+
+      await db.appConfigsDao.setValue('patientId', 'pat-1');
+      await db.appConfigsDao.setValue('elderName', 'Test Patient');
+      await tester.pumpWidget(
+        MaterialApp(home: HomeScreen(services: services)),
+      );
+      await tester.pumpAndSettle();
+
+      final buttonFinder = find.byKey(const Key('home_screen_reader_button'));
+      expect(buttonFinder, findsOneWidget);
+
+      await tester.tap(buttonFinder);
+      await tester.pump();
+
+      expect(screenReader.isSpeaking, isTrue);
+      expect(fakeTts.speakCalls, [
+        'Welcome to Smriti. You can tap the Sathi button below to talk to your companion, or view your daily reminders.'
+      ]);
+
+      await tester.tap(buttonFinder);
+      await tester.pump();
+
+      expect(screenReader.isSpeaking, isFalse);
+      expect(fakeTts.stopCalls, 1);
     });
   });
 

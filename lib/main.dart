@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app_colors.dart';
 import 'core/app_services.dart';
@@ -8,9 +9,17 @@ import 'screens/startup_gate.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  try {
+    await dotenv.load(fileName: 'assets/.env');
+    debugPrint('[main] dotenv loaded successfully from assets/.env (API Key: ${dotenv.env['VOICEBOT_API_KEY'] != null ? "length ${dotenv.env['VOICEBOT_API_KEY']!.length}" : "null"})');
+  } catch (e) {
+    debugPrint('[main] Warning: dotenv failed to load assets/.env: $e');
+  }
+
   await initSupabase();
 
   final services = AppServices();
+  services.startPeriodicSync();
 
   // AndroidAlarmManager must be initialised before any alarm can be scheduled,
   // and the notification channels before any can be shown. Neither is fatal on

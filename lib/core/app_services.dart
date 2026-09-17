@@ -10,6 +10,7 @@ import 'repo/ability_repo.dart';
 import 'repo/content_repo.dart';
 import 'repo/event_repo.dart';
 import 'repo/memo_repo.dart';
+import 'sync/connectivity_service.dart';
 import 'sync/content_puller.dart';
 import 'sync/escalation_writer.dart';
 import 'sync/event_pusher.dart';
@@ -20,7 +21,9 @@ import 'sync/sync_engine.dart';
 import 'kiosk/kiosk_service.dart';
 import 'reminders/notifications.dart';
 import 'voice/phrase_player.dart';
+import 'voice/screen_reader_service.dart';
 import 'voice/voice_commander.dart';
+import 'voicebot/voicebot_controller.dart';
 
 /// Builds the object graph the app runs on.
 ///
@@ -37,11 +40,17 @@ class AppServices {
     KioskHandler? kioskHandler,
     PhrasePlayer? phrasePlayer,
     VoiceCommander? voiceCommander,
+    VoiceBotController? voiceBotController,
+    ScreenReaderService? screenReaderService,
+    ConnectivityService? connectivityService,
+    bool enablePeriodicSync = false,
   }) : db = database ?? appDatabase {
     contentRepo = ContentRepo(db);
     eventRepo = EventRepo(db);
     abilityRepo = AbilityRepo(db);
     memoRepo = MemoRepo(db);
+
+    this.connectivityService = connectivityService ?? ConnectivityService();
 
     this.alarmScheduler =
         alarmScheduler ?? AlarmScheduler(contentRepo: contentRepo);
@@ -57,6 +66,8 @@ class AppServices {
 
     this.phrasePlayer = phrasePlayer ?? DiskAndAssetPhrasePlayer();
     this.voiceCommander = voiceCommander ?? SpeechToTextVoiceCommander();
+    this.voiceBotController = voiceBotController ?? VoiceBotController();
+    this.screenReaderService = screenReaderService ?? ScreenReaderService();
 
     contentPuller = ContentPuller(
       configs: db.appConfigsDao,
@@ -75,12 +86,27 @@ class AppServices {
       contentPuller: contentPuller,
       heartbeat: Heartbeat(eventRepo: eventRepo, configs: db.appConfigsDao),
       configs: db.appConfigsDao,
-      // TODO(A11/A17): use connectivity_plus so a sync can also be triggered
-      // when the connection comes back. Attempting and failing is harmless in
-      // the meantime — every stage is independently wrapped.
-      hasConnection: () async => true,
+      hasConnection: () => this.connectivityService.checkConnection(),
       isAuthenticated: () async => hasSupabaseSession(),
     );
+
+    // Auto-sync whenever network connection is restored
+    _connectivitySubscription =
+        this.connectivityService.onConnectionRestored.listen((_) {
+      unawaited(syncEngine.run(trigger: SyncTrigger.connectivity));
+    });
+
+    if (enablePeriodicSync) {
+      startPeriodicSync();
+    }
+  }
+
+  /// Starts periodic sync while the app is active (per spec §9).
+  void startPeriodicSync({Duration interval = const Duration(minutes: 15)}) {
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = Timer.periodic(interval, (_) {
+      unawaited(syncEngine.run(trigger: SyncTrigger.periodic));
+    });
   }
 
   /// Posts and clears dose notifications.
@@ -99,6 +125,12 @@ class AppServices {
   late final KioskService kioskService;
   late final PhrasePlayer phrasePlayer;
   late final VoiceCommander voiceCommander;
+  late final VoiceBotController voiceBotController;
+  late final ScreenReaderService screenReaderService;
+  late final ConnectivityService connectivityService;
+
+  StreamSubscription<void>? _connectivitySubscription;
+  Timer? _periodicSyncTimer;
 
   static const String patientIdKey = 'patientId';
 
@@ -137,4 +169,13 @@ class AppServices {
   /// directory, e.g. `medications/photos/{id}.jpg`.
   Future<String> resolveMediaPath(String relativePath) =>
       FilePaths.absolute(relativePath);
+
+  /// Releases active listeners and background timers.
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    _periodicSyncTimer?.cancel();
+    connectivityService.dispose();
+    voiceBotController.dispose();
+    screenReaderService.dispose();
+  }
 }

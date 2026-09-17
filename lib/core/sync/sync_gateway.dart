@@ -9,7 +9,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// `supabase_flutter` inside `lib/core/sync/` (AGENTS.md non-negotiable #1).
 abstract class SyncGateway {
   /// Insert-only upsert. Implementations must never read the rows back.
-  Future<void> upsert(String table, List<Map<String, dynamic>> rows);
+  Future<void> upsert(
+    String table,
+    List<Map<String, dynamic>> rows, {
+    bool ignoreDuplicates = true,
+  });
 
   /// Uploads bytes to a storage bucket. Returns the object path.
   Future<String> uploadFile(String bucket, String objectPath, List<int> bytes);
@@ -25,12 +29,16 @@ class SupabaseSyncGateway implements SyncGateway {
   /// fails with a misleading row-level-security error even though the insert
   /// succeeded.
   @override
-  Future<void> upsert(String table, List<Map<String, dynamic>> rows) async {
+  Future<void> upsert(
+    String table,
+    List<Map<String, dynamic>> rows, {
+    bool ignoreDuplicates = true,
+  }) async {
     if (rows.isEmpty) return;
     await Supabase.instance.client.from(table).upsert(
           rows,
           onConflict: 'id',
-          ignoreDuplicates: true,
+          ignoreDuplicates: ignoreDuplicates,
         );
   }
 

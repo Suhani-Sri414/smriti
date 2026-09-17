@@ -157,7 +157,7 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
                               ),
                               const SizedBox(height: 16),
 
-                              // 9 FACES GRID (3x3, No Scrolling)
+                              // 9 FACES GRID
                               Expanded(
                                 child: people.isEmpty
                                     ? const Center(
@@ -173,17 +173,30 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
                                       )
                                     : LayoutBuilder(
                                         builder: (context, constraints) {
+                                          final isCompact =
+                                              constraints.maxWidth < 600;
+                                          final isLandscape =
+                                              constraints.maxWidth >
+                                                  constraints.maxHeight;
                                           final displayList =
                                               people.take(9).toList();
                                           return GridView.builder(
-                                            physics:
-                                                const NeverScrollableScrollPhysics(),
+                                            physics: isLandscape && !isCompact
+                                                ? const NeverScrollableScrollPhysics()
+                                                : const BouncingScrollPhysics(),
+                                            padding: const EdgeInsets.only(
+                                              bottom: 84,
+                                            ),
                                             gridDelegate:
-                                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                              crossAxisCount: 3,
-                                              childAspectRatio: 1.35,
-                                              crossAxisSpacing: 24,
-                                              mainAxisSpacing: 14,
+                                                SliverGridDelegateWithFixedCrossAxisCount(
+                                              crossAxisCount: isCompact ? 3 : 3,
+                                              childAspectRatio: isCompact
+                                                  ? 0.78
+                                                  : (isLandscape ? 1.35 : 1.0),
+                                              crossAxisSpacing:
+                                                  isCompact ? 12 : 24,
+                                              mainAxisSpacing:
+                                                  isCompact ? 10 : 14,
                                             ),
                                             itemCount: displayList.length,
                                             itemBuilder: (context, index) {
@@ -191,6 +204,7 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
                                               return _buildPersonAvatar(
                                                 person: person,
                                                 index: index,
+                                                isCompact: isCompact,
                                               );
                                             },
                                           );
@@ -250,9 +264,11 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
   Widget _buildPersonAvatar({
     required PeopleData person,
     required int index,
+    bool isCompact = false,
   }) {
     final avatarColor = _getAvatarColor(index);
     final photo = existingFile(person.photoPath);
+    final diskSize = isCompact ? 64.0 : 88.0;
 
     return InkWell(
       key: Key('person_card_${person.id}'),
@@ -263,8 +279,8 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
         children: [
           // Circular Disk
           Container(
-            width: 88,
-            height: 88,
+            width: diskSize,
+            height: diskSize,
             decoration: const BoxDecoration(
               color: Color(0xFFE4DAC3),
               shape: BoxShape.circle,
@@ -274,21 +290,28 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
                 ? Image.file(
                     photo,
                     fit: BoxFit.cover,
-                    width: 88,
-                    height: 88,
+                    width: diskSize,
+                    height: diskSize,
                   )
-                : _buildAvatarSilhouette(index, avatarColor),
+                : (isCompact
+                    ? Transform.scale(
+                        scale: diskSize / 88.0,
+                        child: _buildAvatarSilhouette(index, avatarColor),
+                      )
+                    : _buildAvatarSilhouette(index, avatarColor)),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: isCompact ? 6 : 10),
 
           // Name underneath (never on hover)
           Text(
             person.name,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 20,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: isCompact ? 15 : 20,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF261D18),
+              color: const Color(0xFF261D18),
               fontFamily: 'Noto Sans',
             ),
           ),
@@ -497,12 +520,13 @@ class _PersonDetailDialogState extends State<_PersonDetailDialog> {
     return Dialog(
       backgroundColor: const Color(0xFFFFFDF8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Container(
-        width: 520,
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+      child: SingleChildScrollView(
+        child: Container(
+          width: 520,
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             // Avatar / Photo
             Container(
               width: 104,
@@ -625,6 +649,7 @@ class _PersonDetailDialogState extends State<_PersonDetailDialog> {
           ],
         ),
       ),
+    ),
     );
   }
 }

@@ -48,11 +48,22 @@ class FacesOfMyFamilyGame implements CognitiveGame {
     List<FamilyPerson>? people,
     Random? random,
     GhostHandController? ghostHand,
-  })  : people = (people != null && people.length >= 3)
-            ? people
-            : defaultFamilyPeople,
+  })  : people = _ensureMinimumPeople(people),
         _random = random ?? Random(),
         ghostHand = ghostHand ?? GhostHandController();
+
+  static List<FamilyPerson> _ensureMinimumPeople(List<FamilyPerson>? input) {
+    if (input == null || input.isEmpty) return defaultFamilyPeople;
+    if (input.length >= 3) return input;
+    final list = List<FamilyPerson>.from(input);
+    for (final def in defaultFamilyPeople) {
+      if (!list.any((p) => p.id == def.id)) {
+        list.add(def);
+        if (list.length >= 3) break;
+      }
+    }
+    return list;
+  }
 
   final List<FamilyPerson> people;
   final Random _random;

@@ -46,7 +46,7 @@ class RemoteRows {
         'movement_ms': row.movementMs,
         'response_time_ms': row.responseTimeMs,
         'chosen_id': row.chosenId,
-        'error_class': row.errorClass,
+        'error_class': remoteErrorClass(row.errorClass),
         'trial_index': row.trialIndex,
         // text: the encoded JSON string is the value.
         'trial_context': row.trialContext,
@@ -88,6 +88,35 @@ class RemoteRows {
         'demo_replays': row.demoReplays,
       };
 
+  /// Maps device reminder outcomes to the backend vocabulary (§7 / 0004_events.sql).
+  /// Backend check: `outcome in ('confirmed','declined','no_response')`.
+  static String? remoteOutcome(String? localOutcome) {
+    if (localOutcome == null) return null;
+    switch (localOutcome.toLowerCase().trim()) {
+      case 'taken':
+      case 'confirmed':
+        return 'confirmed';
+      case 'snoozed':
+      case 'declined':
+      case 'not_now':
+        return 'declined';
+      case 'missed':
+      case 'no_response':
+        return 'no_response';
+      default:
+        return localOutcome;
+    }
+  }
+
+  /// Maps device error classes to backend analytics vocabulary.
+  /// Backend daily_play aggregates: 'perseverative', 'repeat_selection', 'semantic'.
+  static String? remoteErrorClass(String? err) {
+    if (err == null) return null;
+    if (err.startsWith('semantic')) return 'semantic';
+    if (err == 'perseveration') return 'perseverative';
+    return err;
+  }
+
   static Map<String, dynamic> reminderEvent(
     ReminderEvent row,
     String patientId,
@@ -99,7 +128,7 @@ class RemoteRows {
         'scheduled_at': row.scheduledAt,
         'fired_at': row.firedAt,
         'responded_at': row.respondedAt,
-        'outcome': row.outcome,
+        'outcome': remoteOutcome(row.outcome),
         'channel': row.channel,
         'ladder_step': row.ladderStep,
       };

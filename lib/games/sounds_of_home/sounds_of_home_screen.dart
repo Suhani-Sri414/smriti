@@ -183,6 +183,10 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
         (_item?.payload['options'] as List<Object?>?)?.cast<HomeSound>() ??
             const [];
 
+    final media = MediaQuery.of(context);
+    final isLandscape = media.orientation == Orientation.landscape;
+    final isCompact = media.size.shortestSide < 600;
+
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       body: SafeArea(
@@ -190,7 +194,12 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
           children: [
             // TOP BAR
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 12, 28, 8),
+              padding: EdgeInsets.fromLTRB(
+                isCompact ? 16 : 24,
+                isCompact ? 8 : 12,
+                isCompact ? 16 : 28,
+                isCompact ? 6 : 8,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -199,24 +208,27 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
                     onTap: () => Navigator.of(context).pop(),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompact ? 12 : 16,
+                        vertical: isCompact ? 6 : 8,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFFFDF8),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                             color: AppColors.primaryText, width: 2),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.arrow_back_rounded,
-                              size: 28, color: AppColors.primaryText),
-                          SizedBox(width: 8),
+                              size: isCompact ? 24 : 28,
+                              color: AppColors.primaryText),
+                          const SizedBox(width: 8),
                           Text(
                             'Games',
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: isCompact ? 17 : 20,
                               fontWeight: FontWeight.w700,
                               color: AppColors.primaryText,
                               fontFamily: 'Noto Sans',
@@ -226,15 +238,21 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
                       ),
                     ),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Center(
-                      child: Text(
-                        'Sounds of Home',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primaryText,
-                          fontFamily: 'Noto Sans',
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Sounds of Home',
+                            style: TextStyle(
+                              fontSize: isCompact ? 20 : 26,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primaryText,
+                              fontFamily: 'Noto Sans',
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -243,16 +261,17 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
                     children: [
                       IconButton(
                         key: const Key('sounds_hint_button'),
-                        icon: const Icon(Icons.lightbulb_outline_rounded,
-                            size: 32, color: AppColors.marigoldDark),
+                        icon: Icon(Icons.lightbulb_outline_rounded,
+                            size: isCompact ? 28 : 32,
+                            color: AppColors.marigoldDark),
                         tooltip: 'Hint',
                         onPressed: _onAskHint,
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: isCompact ? 6 : 12),
                       Text(
                         _formatTime(),
-                        style: const TextStyle(
-                          fontSize: 22,
+                        style: TextStyle(
+                          fontSize: isCompact ? 18 : 22,
                           fontWeight: FontWeight.w700,
                           color: AppColors.primaryText,
                           fontFamily: 'Noto Sans',
@@ -273,139 +292,92 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
                       ),
                     )
                   : Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 12),
-                      child: Column(
-                        children: [
-                          // CENTER SOUND PLAYER CARD
-                          Expanded(
-                            flex: 5,
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFFDF8),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: AppColors.marigold.withAlpha(120),
-                                  width: 2.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withAlpha(12),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Animated Sound Pulsing Button
-                                  InkWell(
-                                    key: const Key('sounds_listen_button'),
-                                    onTap: _onReplayAudio,
-                                    borderRadius: BorderRadius.circular(50),
-                                    child: AnimatedContainer(
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      width: 96,
-                                      height: 96,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: _isPlayingSound
-                                            ? AppColors.marigold
-                                            : const Color(0xFFFAF2E1),
-                                        border: Border.all(
-                                          color: AppColors.marigold,
-                                          width: 3,
-                                        ),
-                                        boxShadow: _isPlayingSound
-                                            ? [
-                                                BoxShadow(
-                                                  color: AppColors.marigold
-                                                      .withAlpha(100),
-                                                  blurRadius: 20,
-                                                  spreadRadius: 6,
-                                                ),
-                                              ]
-                                            : [],
-                                      ),
-                                      child: Icon(
-                                        _isPlayingSound
-                                            ? Icons.volume_up_rounded
-                                            : Icons.play_arrow_rounded,
-                                        size: 52,
-                                        color: _isPlayingSound
-                                            ? Colors.white
-                                            : AppColors.marigoldDark,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'What made this sound?',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primaryText,
-                                      fontFamily: 'Noto Sans',
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Tap the speaker to listen again',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      color: Color(0xFF7A6855),
-                                      fontFamily: 'Noto Sans',
-                                    ),
-                                  ),
-                                  if (_feedbackMessage != null) ...[
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 20, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFF3EDE2),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        _feedbackMessage!,
-                                        style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.primaryText,
-                                          fontFamily: 'Noto Sans',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // 3 CHOICE CARDS
-                          Expanded(
-                            flex: 3,
-                            child: Row(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompact ? 16 : 32,
+                        vertical: isCompact ? 8 : 12,
+                      ),
+                      child: isLandscape
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                for (int i = 0; i < options.length; i++) ...[
-                                  if (i > 0) const SizedBox(width: 20),
-                                  Expanded(
-                                    child: _buildChoiceCard(options[i]),
+                                // Left: Sound Player Card
+                                Expanded(
+                                  flex: 5,
+                                  child: _buildPlayerCard(isCompact: isCompact),
+                                ),
+                                SizedBox(width: isCompact ? 12 : 20),
+                                // Right: 3 Choice Cards vertically
+                                Expanded(
+                                  flex: 5,
+                                  child: Column(
+                                    children: [
+                                      for (int i = 0;
+                                          i < options.length;
+                                          i++) ...[
+                                        if (i > 0)
+                                          SizedBox(height: isCompact ? 8 : 12),
+                                        Expanded(
+                                          child: _buildChoiceCard(
+                                            options[i],
+                                            isCompact: isCompact,
+                                            isRowLayout: true,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                ],
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                // Top: Sound Player Card
+                                Expanded(
+                                  flex: 5,
+                                  child: _buildPlayerCard(isCompact: isCompact),
+                                ),
+                                SizedBox(height: isCompact ? 12 : 16),
+                                // Bottom: Choice Cards
+                                Expanded(
+                                  flex: isCompact ? 5 : 3,
+                                  child: isCompact
+                                      ? Column(
+                                          children: [
+                                            for (int i = 0;
+                                                i < options.length;
+                                                i++) ...[
+                                              if (i > 0)
+                                                const SizedBox(height: 8),
+                                              Expanded(
+                                                child: _buildChoiceCard(
+                                                  options[i],
+                                                  isCompact: isCompact,
+                                                  isRowLayout: true,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        )
+                                      : Row(
+                                          children: [
+                                            for (int i = 0;
+                                                i < options.length;
+                                                i++) ...[
+                                              if (i > 0)
+                                                const SizedBox(width: 20),
+                                              Expanded(
+                                                child: _buildChoiceCard(
+                                                  options[i],
+                                                  isCompact: isCompact,
+                                                  isRowLayout: false,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
                     ),
             ),
           ],
@@ -414,7 +386,128 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
     );
   }
 
-  Widget _buildChoiceCard(HomeSound sound) {
+  Widget _buildPlayerCard({required bool isCompact}) {
+    final buttonSize = isCompact ? 76.0 : 96.0;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isCompact ? 12 : 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFDF8),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: AppColors.marigold.withAlpha(120),
+          width: 2.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(12),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Animated Sound Pulsing Button
+          InkWell(
+            key: const Key('sounds_listen_button'),
+            onTap: _onReplayAudio,
+            borderRadius: BorderRadius.circular(50),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: buttonSize,
+              height: buttonSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _isPlayingSound
+                    ? AppColors.marigold
+                    : const Color(0xFFFAF2E1),
+                border: Border.all(
+                  color: AppColors.marigold,
+                  width: 3,
+                ),
+                boxShadow: _isPlayingSound
+                    ? [
+                        BoxShadow(
+                          color: AppColors.marigold.withAlpha(100),
+                          blurRadius: 20,
+                          spreadRadius: 6,
+                        ),
+                      ]
+                    : [],
+              ),
+              child: Icon(
+                _isPlayingSound
+                    ? Icons.volume_up_rounded
+                    : Icons.play_arrow_rounded,
+                size: isCompact ? 42 : 52,
+                color: _isPlayingSound ? Colors.white : AppColors.marigoldDark,
+              ),
+            ),
+          ),
+          SizedBox(height: isCompact ? 6 : 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'What made this sound?',
+              style: TextStyle(
+                fontSize: isCompact ? 20 : 24,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryText,
+                fontFamily: 'Noto Sans',
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              'Tap the speaker to listen again',
+              style: TextStyle(
+                fontSize: isCompact ? 13 : 16,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF7A6855),
+                fontFamily: 'Noto Sans',
+              ),
+            ),
+          ),
+          if (_feedbackMessage != null) ...[
+            SizedBox(height: isCompact ? 6 : 8),
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: isCompact ? 14 : 20,
+                vertical: isCompact ? 4 : 6,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3EDE2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _feedbackMessage!,
+                  style: TextStyle(
+                    fontSize: isCompact ? 16 : 20,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryText,
+                    fontFamily: 'Noto Sans',
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChoiceCard(
+    HomeSound sound, {
+    required bool isCompact,
+    required bool isRowLayout,
+  }) {
     final isEliminated = sound.id == _eliminatedId;
 
     if (isEliminated) {
@@ -436,7 +529,10 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
       onTap: _isProcessing ? null : () => _onChooseSound(sound),
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: isCompact ? 12 : 16,
+          vertical: isCompact ? 6 : 10,
+        ),
         decoration: BoxDecoration(
           color: const Color(0xFFFFFDF8),
           borderRadius: BorderRadius.circular(20),
@@ -449,43 +545,95 @@ class _SoundsOfHomeScreenState extends State<SoundsOfHomeScreen> {
             ),
           ],
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(sound.icon, size: 38, color: sound.color),
-            const SizedBox(height: 4),
-            Flexible(
-              child: Text(
-                sound.label,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryText,
-                  fontFamily: 'Noto Sans',
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        child: isRowLayout
+            ? Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(isCompact ? 6 : 8),
+                    decoration: BoxDecoration(
+                      color: sound.color.withAlpha(25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      sound.icon,
+                      size: isCompact ? 24 : 32,
+                      color: sound.color,
+                    ),
+                  ),
+                  SizedBox(width: isCompact ? 10 : 14),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            sound.label,
+                            style: TextStyle(
+                              fontSize: isCompact ? 17 : 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primaryText,
+                              fontFamily: 'Noto Sans',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            sound.description,
+                            style: TextStyle(
+                              fontSize: isCompact ? 12 : 14,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.primaryText.withAlpha(180),
+                              fontFamily: 'Noto Sans',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    sound.icon,
+                    size: isCompact ? 30 : 38,
+                    color: sound.color,
+                  ),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      sound.label,
+                      style: TextStyle(
+                        fontSize: isCompact ? 17 : 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryText,
+                        fontFamily: 'Noto Sans',
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      sound.description,
+                      style: TextStyle(
+                        fontSize: isCompact ? 12 : 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.primaryText.withAlpha(180),
+                        fontFamily: 'Noto Sans',
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 2),
-            Flexible(
-              child: Text(
-                sound.description,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.primaryText.withAlpha(180),
-                  fontFamily: 'Noto Sans',
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

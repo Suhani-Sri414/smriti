@@ -264,5 +264,262 @@ void main() {
       expect(find.byType(MarketBasketScreen), findsNothing);
       expect(find.text('Open Basket'), findsOneWidget);
     });
+
+    testWidgets('renders cleanly on phone portrait (390x844) without any overflow',
+        (tester) async {
+      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final services = AppServices(database: db);
+      await tester.pumpWidget(buildSubject(services));
+      await tester.pumpAndSettle();
+
+      // Move to Phase 2 (Shelf)
+      await tester.tap(find.byKey(const Key('mb_ready')));
+      await tester.pumpAndSettle();
+
+      // Pick an item
+      final itemCards = find.byWidgetPredicate(
+        (w) => w.key != null && w.key.toString().contains('mb_pick_'),
+      );
+      await tester.tap(itemCards.first);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('renders cleanly on phone landscape (844x390) without any overflow',
+        (tester) async {
+      tester.view.physicalSize = const Size(844 * 3, 390 * 3);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final services = AppServices(database: db);
+      await tester.pumpWidget(buildSubject(services));
+      await tester.pumpAndSettle();
+
+      // Check Phase 1 (List)
+      expect(tester.takeException(), isNull);
+
+      // Move to Phase 2 (Shelf)
+      await tester.tap(find.byKey(const Key('mb_ready')));
+      await tester.pumpAndSettle();
+
+      // Pick an item
+      final itemCards = find.byWidgetPredicate(
+        (w) => w.key != null && w.key.toString().contains('mb_pick_'),
+      );
+      await tester.tap(itemCards.first);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('renders cleanly on smaller phone (360x640) without any overflow',
+        (tester) async {
+      tester.view.physicalSize = const Size(360 * 2, 640 * 2);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final services = AppServices(database: db);
+      await tester.pumpWidget(buildSubject(services));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('mb_ready')));
+      await tester.pumpAndSettle();
+
+      final itemCards = find.byWidgetPredicate(
+        (w) => w.key != null && w.key.toString().contains('mb_pick_'),
+      );
+      await tester.tap(itemCards.first);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('renders cleanly with long and short item names in portrait and landscape',
+        (tester) async {
+      final customContent = GameContent(
+        version: '1.0.0',
+        marketItems: const [
+          MarketItem(
+            id: 'long_1',
+            labelKey: 'item.mustardoil',
+            iconAsset: 'assets/games/market_basket/mustardoil.png',
+            category: 'pantry',
+          ),
+          MarketItem(
+            id: 'long_2',
+            labelKey: 'item.chana',
+            iconAsset: 'assets/games/market_basket/chana.png',
+            category: 'pulse',
+          ),
+          MarketItem(
+            id: 'short_1',
+            labelKey: 'item.tea',
+            iconAsset: 'assets/games/market_basket/tea.png',
+            category: 'pantry',
+          ),
+          MarketItem(
+            id: 'short_2',
+            labelKey: 'item.dal',
+            iconAsset: 'assets/games/market_basket/dal.png',
+            category: 'pulse',
+          ),
+          MarketItem(
+            id: 'short_3',
+            labelKey: 'item.rice',
+            iconAsset: 'assets/games/market_basket/rice.png',
+            category: 'grain',
+          ),
+          MarketItem(
+            id: 'short_4',
+            labelKey: 'item.milk',
+            iconAsset: 'assets/games/market_basket/milk.png',
+            category: 'dairy',
+          ),
+        ],
+      );
+
+      // 1. Test Portrait (390x844)
+      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final services = AppServices(database: db);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MarketBasketScreen(
+            services: services,
+            content: customContent,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Phase 1 (List) has zero overflow
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('mb_list')), findsOneWidget);
+
+      // Move to Phase 2 (Shelf)
+      await tester.tap(find.byKey(const Key('mb_ready')));
+      await tester.pumpAndSettle();
+
+      // Verify Shelf has zero overflow
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('mb_shelf')), findsOneWidget);
+      expect(find.byKey(const Key('mb_submit')), findsOneWidget);
+
+      // Pick all items to test selection and checkmark visibility
+      for (final id in ['long_1', 'long_2', 'short_1', 'short_2', 'short_3', 'short_4']) {
+        final pickKey = Key('mb_pick_$id');
+        if (find.byKey(pickKey).evaluate().isNotEmpty) {
+          await tester.tap(find.byKey(pickKey));
+          await tester.pumpAndSettle();
+        }
+      }
+      expect(tester.takeException(), isNull);
+
+      // 2. Rotate to Landscape (844x390)
+      tester.view.physicalSize = const Size(844 * 3, 390 * 3);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('mb_submit')), findsOneWidget);
+
+      // Submit and verify praise banner layout
+      await tester.tap(find.byKey(const Key('mb_submit')));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('all 15 items render cleanly with prominent food images and corner checkmarks',
+        (tester) async {
+      final all15Content = _loadTestContent();
+      expect(all15Content.marketItems.length, 15);
+
+      final services = AppServices(database: db);
+
+      // 1. Test in Portrait
+      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MarketBasketScreen(
+            services: services,
+            content: all15Content,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify phase 1 has images
+      expect(find.byType(Image), findsWidgets);
+      expect(tester.takeException(), isNull);
+
+      // Move to Phase 2
+      await tester.tap(find.byKey(const Key('mb_ready')));
+      await tester.pumpAndSettle();
+
+      // Find mat cards
+      final shelfCards = find.byWidgetPredicate(
+        (w) => w.key != null && w.key.toString().contains('mb_pick_'),
+      );
+      expect(shelfCards, findsWidgets);
+
+      // Select and unselect items, verifying corner indicators and no overflow
+      for (final card in shelfCards.evaluate().take(4)) {
+        await tester.tap(find.byWidget(card.widget));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+
+      // 2. Rotate to Landscape (844x390)
+      tester.view.physicalSize = const Size(844 * 3, 390 * 3);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // 3. Tablet Landscape (1280x800)
+      tester.view.physicalSize = const Size(1280 * 2, 800 * 2);
+      tester.view.devicePixelRatio = 2.0;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Tap submit and ensure praise feedback renders with zero overflow
+      await tester.tap(find.byKey(const Key('mb_submit')));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
   });
 }

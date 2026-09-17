@@ -61,6 +61,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       body: SafeArea(
@@ -71,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
               left: 0,
               right: 0,
               bottom: 0,
-              height: 150,
+              height: isLandscape ? 80 : 150,
               child: IgnorePointer(
                 child: CustomPaint(painter: BottomDecorationPainter()),
               ),
@@ -80,7 +83,13 @@ class _LoginScreenState extends State<LoginScreen> {
             // Main screen content
             Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(28, 20, 28, 140),
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  28,
+                  isLandscape ? 12 : 20,
+                  28,
+                  isLandscape ? 36 : 140,
+                ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 540),
                   child: Column(
@@ -88,8 +97,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       Image.asset(
                         'assets/images/smriti_login_logo.png',
-                        width: 260,
-                        height: 150,
+                        width: isLandscape ? 180 : 260,
+                        height: isLandscape ? 90 : 150,
                         fit: BoxFit.contain,
                       ),
                       const SizedBox(height: 6),
@@ -97,13 +106,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         'Memories for a brighter tomorrow',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: isLandscape ? 14 : 16,
                           color: AppColors.secondaryText,
                           fontStyle: FontStyle.italic,
                         ),
                       ),
 
-                      const SizedBox(height: 32),
+                      SizedBox(height: isLandscape ? 16 : 32),
 
                       // PAIRING OPTIONS CARD
                       Container(

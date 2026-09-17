@@ -50,6 +50,12 @@ dependencies:
   wakelock_plus: ^1.2.0
   kiosk_mode: ^0.7.0+1
   speech_to_text: ^7.0.0
+  connectivity_plus: ^7.3.1
+  flutter_dotenv: ^6.0.1
+  http: ^1.2.2
+  http_parser: ^4.0.2
+  record: ^6.2.1
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:
@@ -77,6 +83,8 @@ flutter:
   assets:
     - assets/images/smriti_login_logo.png
     - assets/mock_content/mock_content.json
+    - assets/images/market_basket_15_images_final/
+    - assets/.env
 
   # To add assets to your application, add an assets section, like this:
   # assets:

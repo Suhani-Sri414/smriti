@@ -40,8 +40,56 @@ class EventRepo {
         endedAt: Value(endedAt),
         completed: Value(completed),
         abandonedAtMs: Value(abandonedAtMs),
+        synced: const Value(false),
       ),
     );
+  }
+
+  /// Closes any open session that was left dangling due to an app crash or kill.
+  /// Any session older than the 6-minute cap is marked abandoned.
+  Future<void> closeDanglingSessions({DateTime? now}) async {
+    final currentTime = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    final capMs = const Duration(minutes: 6).inMilliseconds;
+    final cutoff = currentTime - capMs;
+
+    final dangling = await (db.select(db.sessions)
+          ..where((t) => t.endedAt.isNull() & t.startedAt.isSmallerThanValue(cutoff)))
+        .get();
+
+    for (final s in dangling) {
+      await (db.update(db.sessions)..where((t) => t.id.equals(s.id)))
+          .write(
+        SessionsCompanion(
+          endedAt: Value(s.startedAt + capMs),
+          completed: const Value(false),
+          abandonedAtMs: Value(capMs),
+          synced: const Value(false),
+        ),
+      );
+    }
+  }
+
+  /// Finalizes any reminder event that fired more than 30 minutes ago without
+  /// being answered or escalated, marking it as `no_response`.
+  Future<void> closeDanglingReminderEvents({DateTime? now}) async {
+    final currentTime = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    final timeoutMs = const Duration(minutes: 30).inMilliseconds;
+    final cutoff = currentTime - timeoutMs;
+
+    final dangling = await (db.select(db.reminderEvents)
+          ..where((t) => t.outcome.isNull() & t.scheduledAt.isSmallerThanValue(cutoff)))
+        .get();
+
+    for (final r in dangling) {
+      await (db.update(db.reminderEvents)..where((t) => t.id.equals(r.id)))
+          .write(
+        ReminderEventsCompanion(
+          outcome: const Value('no_response'),
+          respondedAt: Value(r.scheduledAt + timeoutMs),
+          synced: const Value(false),
+        ),
+      );
+    }
   }
 
   /// Increments the ghost-hand demo replay count on an open session.
@@ -96,6 +144,7 @@ class EventRepo {
       ReminderEventsCompanion(
         outcome: Value(outcome),
         respondedAt: Value(respondedAt),
+        synced: const Value(false),
       ),
     );
   }
@@ -108,11 +157,20 @@ class EventRepo {
   // ESCALATION REQUESTS
 
   /// Escalation IDs are deterministic (`{reminderEventId}_{step}`), so a retry
-  /// after a crash must not fail or duplicate — hence insert-or-ignore.
+  /// after a crash or a lost response can never place a second phone call
+  /// (AGENTS.md non-negotiable #2).
   Future<void> insertEscalation(EscalationRequestsCompanion request) async {
     await db
         .into(db.escalationRequests)
         .insert(request, mode: InsertMode.insertOrIgnore);
+  }
+
+  /// Cancels an armed escalation on the device. Called when the elder takes
+  /// their medicine after a reminder has already queued an escalation. The
+  /// push layer skips cancelled rows entirely, so the server never sees them.
+  Future<void> cancelEscalation(String id) async {
+    await (db.update(db.escalationRequests)..where((t) => t.id.equals(id)))
+        .write(const EscalationRequestsCompanion(cancelled: Value(true)));
   }
 
   Future<EscalationRequest?> getEscalation(String id) {
@@ -122,9 +180,17 @@ class EventRepo {
 
   // UNSYNCED READS — used by the sync layer to build push batches
 
-  Future<List<Session>> unsyncedSessions({int limit = 200}) {
-    return (db.select(db.sessions)
-          ..where((t) => t.synced.equals(false))
+  Future<List<Session>> unsyncedSessions({
+    int limit = 200,
+    bool onlyCompleted = false,
+  }) {
+    final query = db.select(db.sessions);
+    if (onlyCompleted) {
+      query.where((t) => t.synced.equals(false) & t.endedAt.isNotNull());
+    } else {
+      query.where((t) => t.synced.equals(false));
+    }
+    return (query
           ..orderBy([(t) => OrderingTerm(expression: t.startedAt)])
           ..limit(limit))
         .get();
@@ -138,9 +204,17 @@ class EventRepo {
         .get();
   }
 
-  Future<List<ReminderEvent>> unsyncedReminderEvents({int limit = 200}) {
-    return (db.select(db.reminderEvents)
-          ..where((t) => t.synced.equals(false))
+  Future<List<ReminderEvent>> unsyncedReminderEvents({
+    int limit = 200,
+    bool onlyFinalized = false,
+  }) {
+    final query = db.select(db.reminderEvents);
+    if (onlyFinalized) {
+      query.where((t) => t.synced.equals(false) & t.outcome.isNotNull());
+    } else {
+      query.where((t) => t.synced.equals(false));
+    }
+    return (query
           ..orderBy([(t) => OrderingTerm(expression: t.scheduledAt)])
           ..limit(limit))
         .get();
@@ -156,19 +230,27 @@ class EventRepo {
 
   /// Total rows still waiting to be pushed, across all four tables. Reported
   /// to the server by the heartbeat (APP-BUILD-SPEC.md §9).
-  Future<int> unsyncedCount() async {
+  Future<int> unsyncedCount({bool pushableOnly = true}) async {
+    await closeDanglingSessions();
+    await closeDanglingReminderEvents();
     final counts = await Future.wait<int>([
       _countUnsynced('trial_events'),
-      _countUnsynced('sessions'),
-      _countUnsynced('reminder_events'),
+      _countUnsynced(
+        'sessions',
+        extraCondition: pushableOnly ? 'AND ended_at IS NOT NULL' : '',
+      ),
+      _countUnsynced(
+        'reminder_events',
+        extraCondition: pushableOnly ? 'AND outcome IS NOT NULL' : '',
+      ),
       _countUnsynced('escalation_requests'),
     ]);
     return counts.fold<int>(0, (sum, count) => sum + count);
   }
 
-  Future<int> _countUnsynced(String table) async {
+  Future<int> _countUnsynced(String table, {String extraCondition = ''}) async {
     final row = await db.customSelect(
-      'SELECT COUNT(*) AS c FROM $table WHERE synced = 0',
+      'SELECT COUNT(*) AS c FROM $table WHERE synced = 0 $extraCondition',
     ).getSingle();
     return row.read<int>('c');
   }

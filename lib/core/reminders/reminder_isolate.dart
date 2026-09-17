@@ -195,6 +195,16 @@ class ReminderFirer {
     if (reminderEventId == null) return;
     if (await _alreadyAnswered(reminderEventId)) return;
 
+    final nowMs = _now().millisecondsSinceEpoch;
+
+    // The elder never answered within the ladder window; finalize the outcome
+    // as `no_response` so it reports as missed adherence.
+    await _events.recordReminderOutcome(
+      id: reminderEventId,
+      outcome: 'no_response',
+      respondedAt: nowMs,
+    );
+
     await _events.insertEscalation(
       EscalationRequestsCompanion.insert(
         // Deterministic, so a retry cannot cause a second phone call.
@@ -205,7 +215,7 @@ class ReminderFirer {
         reminderEventId: reminderEventId,
         medicationId: medication.id,
         step: ReminderLadder.stepEscalate,
-        requestedAt: _now().millisecondsSinceEpoch,
+        requestedAt: nowMs,
       ),
     );
 

@@ -165,17 +165,23 @@ class _ReminderScreenState extends State<ReminderScreen> {
     final windowStr =
         '${_formatMinutes(widget.medication.windowStartMin)} – ${_formatMinutes(widget.medication.windowEndMin)}';
 
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: AppColors.medicineBlush,
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+            padding: EdgeInsets.symmetric(
+              horizontal: isLandscape ? 24 : 16,
+              vertical: isLandscape ? 12 : 16,
+            ),
             child: Container(
               constraints: const BoxConstraints(maxWidth: 1040, maxHeight: 680),
               decoration: BoxDecoration(
                 color: const Color(0xFFFFFDF8),
-                borderRadius: BorderRadius.circular(32),
+                borderRadius: BorderRadius.circular(28),
                 border: Border.all(
                   color: AppColors.border,
                   width: 2.5,
@@ -188,332 +194,424 @@ class _ReminderScreenState extends State<ReminderScreen> {
                   ),
                 ],
               ),
-              padding: const EdgeInsets.fromLTRB(48, 36, 48, 36),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Main Body (Two Columns: Visual Left, Information Right)
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Left Visual: Pill Photo or Vector Pill + Voice Replay
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 260,
-                                height: 220,
-                                decoration: BoxDecoration(
-                                  color: AppColors.raisedSurface,
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(
-                                    color: AppColors.border.withValues(alpha: 0.7),
-                                    width: 2,
-                                  ),
-                                ),
-                                alignment: Alignment.center,
-                                child: hasRealPhoto
-                                    ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(22),
-                                        child: Image.file(
-                                          file,
-                                          height: 200,
-                                          fit: BoxFit.contain,
-                                        ),
-                                      )
-                                    : const CustomPaint(
-                                        size: Size(220, 150),
-                                        painter: _PillVectorPainter(),
-                                      ),
-                              ),
-
-                              // Caregiver Voice Playback & Replay Button
-                              if (hasVoice) ...[
-                                const SizedBox(height: 16),
-                                InkWell(
-                                  key: const Key('reminder_replay_voice'),
-                                  onTap: _responding ? null : _replayVoice,
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 10,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.medicineBlush,
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: AppColors.terracotta,
-                                        width: 1.8,
-                                      ),
-                                    ),
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            _isPlayingVoice
-                                                ? Icons.volume_up_rounded
-                                                : Icons.replay_rounded,
-                                            size: 24,
-                                            color: AppColors.terracotta,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          const Text(
-                                            'Hear message again',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.terracotta,
-                                              fontFamily: 'Noto Sans',
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 40),
-
-                        // Right Column: Information & Prompts
-                        Expanded(
-                          flex: 6,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Gentle Prompt Tag
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.medicineBlush,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: AppColors.terracotta.withValues(alpha: 0.5),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: const FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.medication_rounded,
-                                        size: 20,
-                                        color: AppColors.terracotta,
-                                      ),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'Medicine time',
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.terracotta,
-                                          fontFamily: 'Noto Sans',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-
-                              // Medication Name
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  widget.medication.name,
-                                  key: const Key('reminder_medication_name'),
-                                  style: const TextStyle(
-                                    fontSize: 40,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primaryText,
-                                    fontFamily: 'Noto Sans',
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-
-                              // Medication Dose
-                              Text(
-                                widget.medication.dose,
-                                key: const Key('reminder_medication_dose'),
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.secondaryText,
-                                  fontFamily: 'Noto Sans',
-                                ),
-                              ),
-                              const SizedBox(height: 18),
-
-                              // Time window
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.wovenMat.withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.access_time_rounded,
-                                        size: 18,
-                                        color: AppColors.secondaryText,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Time: $windowStr',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.secondaryText,
-                                          fontFamily: 'Noto Sans',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Bottom Action Buttons (Large Touch Targets >= 76dp)
-                  Row(
-                    children: [
-                      // "Taken" Button (Leaf green filled)
-                      Expanded(
-                        child: InkWell(
-                          key: const Key('reminder_taken'),
-                          onTap: _responding ? null : () => _respond('taken'),
-                          borderRadius: BorderRadius.circular(24),
-                          child: Container(
-                            height: 76,
-                            decoration: BoxDecoration(
-                              color: AppColors.leafGreen,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: AppColors.leafGreenDark,
-                                width: 2.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.leafGreen.withValues(alpha: 0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 5),
-                                ),
-                              ],
-                            ),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 16),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.check_circle_rounded,
-                                      size: 30,
-                                      color: AppColors.onColor,
-                                    ),
-                                    SizedBox(width: 12),
-                                    Text(
-                                      'Taken',
-                                      style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.onColor,
-                                        fontFamily: 'Noto Sans',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 28),
-
-                      // "Not now" Button (Zero-shame snooze)
-                      Expanded(
-                        child: InkWell(
-                          key: const Key('reminder_not_now'),
-                          onTap: _responding ? null : () => _respond('snoozed'),
-                          borderRadius: BorderRadius.circular(24),
-                          child: Container(
-                            height: 76,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFFDF8),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: AppColors.primaryText,
-                                width: 2.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primaryText.withValues(alpha: 0.06),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 16),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.schedule_rounded,
-                                      size: 30,
-                                      color: AppColors.primaryText,
-                                    ),
-                                    SizedBox(width: 12),
-                                    Text(
-                                      'Not now',
-                                      style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primaryText,
-                                        fontFamily: 'Noto Sans',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              padding: EdgeInsets.fromLTRB(
+                isLandscape ? 28 : 20,
+                isLandscape ? 16 : 20,
+                isLandscape ? 28 : 20,
+                isLandscape ? 16 : 20,
               ),
+              child: isLandscape
+                  ? _buildLandscapeLayout(
+                      file: file,
+                      hasRealPhoto: hasRealPhoto,
+                      hasVoice: hasVoice,
+                      windowStr: windowStr,
+                    )
+                  : _buildPortraitLayout(
+                      file: file,
+                      hasRealPhoto: hasRealPhoto,
+                      hasVoice: hasVoice,
+                      windowStr: windowStr,
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLandscapeLayout({
+    required File? file,
+    required bool hasRealPhoto,
+    required bool hasVoice,
+    required String windowStr,
+  }) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Left Visual: Pill Photo or Vector Pill + Voice Replay
+              Expanded(
+                flex: 5,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildPillBox(
+                      file: file,
+                      hasRealPhoto: hasRealPhoto,
+                      width: 220,
+                      height: 160,
+                    ),
+                    if (hasVoice) ...[
+                      const SizedBox(height: 12),
+                      _buildVoiceButton(),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 32),
+
+              // Right Column: Information & Prompts
+              Expanded(
+                flex: 6,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTimeTag(),
+                    const SizedBox(height: 10),
+                    _buildMedicationName(fontSize: 34),
+                    const SizedBox(height: 4),
+                    _buildMedicationDose(fontSize: 22),
+                    const SizedBox(height: 12),
+                    _buildWindowTag(windowStr),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _buildTakenButton(height: 64)),
+            const SizedBox(width: 20),
+            Expanded(child: _buildNotNowButton(height: 64)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPortraitLayout({
+    required File? file,
+    required bool hasRealPhoto,
+    required bool hasVoice,
+    required String windowStr,
+  }) {
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _buildTimeTag(),
+          const SizedBox(height: 14),
+          _buildPillBox(
+            file: file,
+            hasRealPhoto: hasRealPhoto,
+            width: 220,
+            height: 150,
+          ),
+          if (hasVoice) ...[
+            const SizedBox(height: 12),
+            _buildVoiceButton(),
+          ],
+          const SizedBox(height: 16),
+          _buildMedicationName(fontSize: 32),
+          const SizedBox(height: 4),
+          _buildMedicationDose(fontSize: 20),
+          const SizedBox(height: 12),
+          _buildWindowTag(windowStr),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(child: _buildTakenButton(height: 68)),
+              const SizedBox(width: 14),
+              Expanded(child: _buildNotNowButton(height: 68)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPillBox({
+    required File? file,
+    required bool hasRealPhoto,
+    required double width,
+    required double height,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.raisedSurface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: AppColors.border.withValues(alpha: 0.7),
+          width: 2,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: hasRealPhoto
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Image.file(
+                file!,
+                height: height - 20,
+                fit: BoxFit.contain,
+              ),
+            )
+          : CustomPaint(
+              size: Size(width - 40, height - 40),
+              painter: const _PillVectorPainter(),
+            ),
+    );
+  }
+
+  Widget _buildVoiceButton() {
+    return InkWell(
+      key: const Key('reminder_replay_voice'),
+      onTap: _responding ? null : _replayVoice,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 8,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.medicineBlush,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: AppColors.terracotta,
+            width: 1.8,
+          ),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _isPlayingVoice
+                    ? Icons.volume_up_rounded
+                    : Icons.replay_rounded,
+                size: 22,
+                color: AppColors.terracotta,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Hear message again',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.terracotta,
+                  fontFamily: 'Noto Sans',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeTag() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.medicineBlush,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.terracotta.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+      ),
+      child: const FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.medication_rounded,
+              size: 20,
+              color: AppColors.terracotta,
+            ),
+            SizedBox(width: 8),
+            Text(
+              'Medicine time',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.terracotta,
+                fontFamily: 'Noto Sans',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMedicationName({required double fontSize}) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        widget.medication.name,
+        key: const Key('reminder_medication_name'),
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+          color: AppColors.primaryText,
+          fontFamily: 'Noto Sans',
+          letterSpacing: -0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMedicationDose({required double fontSize}) {
+    return Text(
+      widget.medication.dose,
+      key: const Key('reminder_medication_dose'),
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: FontWeight.w600,
+        color: AppColors.secondaryText,
+        fontFamily: 'Noto Sans',
+      ),
+    );
+  }
+
+  Widget _buildWindowTag(String windowStr) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.wovenMat.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.access_time_rounded,
+              size: 18,
+              color: AppColors.secondaryText,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Time: $windowStr',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.secondaryText,
+                fontFamily: 'Noto Sans',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTakenButton({required double height}) {
+    return InkWell(
+      key: const Key('reminder_taken'),
+      onTap: _responding ? null : () => _respond('taken'),
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: AppColors.leafGreen,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: AppColors.leafGreenDark,
+            width: 2.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.leafGreen.withValues(alpha: 0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 26,
+                  color: AppColors.onColor,
+                ),
+                SizedBox(width: 10),
+                Text(
+                  'Taken',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onColor,
+                    fontFamily: 'Noto Sans',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotNowButton({required double height}) {
+    return InkWell(
+      key: const Key('reminder_not_now'),
+      onTap: _responding ? null : () => _respond('snoozed'),
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFDF8),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: AppColors.primaryText,
+            width: 2.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryText.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.schedule_rounded,
+                  size: 26,
+                  color: AppColors.primaryText,
+                ),
+                SizedBox(width: 10),
+                Text(
+                  'Not now',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryText,
+                    fontFamily: 'Noto Sans',
+                  ),
+                ),
+              ],
             ),
           ),
         ),

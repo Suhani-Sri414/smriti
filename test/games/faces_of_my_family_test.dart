@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -138,6 +139,7 @@ void main() {
   group('FacesOfMyFamilyScreen Widget', () {
     testWidgets('renders game UI, avatar, prompt, and allows selecting choice',
         (tester) async {
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
       final services = AppServices(database: db);
       const content = GameContent(version: '1', marketItems: []);
 
@@ -176,6 +178,7 @@ void main() {
     });
 
     testWidgets('back button exits screen cleanly', (tester) async {
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
       final services = AppServices(database: db);
       const content = GameContent(version: '1', marketItems: []);
 
@@ -207,6 +210,225 @@ void main() {
 
       expect(find.byType(FacesOfMyFamilyScreen), findsNothing);
       expect(find.text('Launch'), findsOneWidget);
+    });
+
+    testWidgets('displays actual uploaded photo when photo file exists for person',
+        (tester) async {
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+      final tempDir = Directory.systemTemp.createTempSync('smriti_photo_test_');
+      final testPhoto = File('${tempDir.path}/veer.png')
+        ..writeAsBytesSync([
+          137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+          0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
+          0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 96, 0, 0, 0, 2,
+          0, 1, 226, 33, 188, 51, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66,
+          96, 130
+        ]);
+
+      try {
+        await db.into(db.people).insert(
+          PeopleCompanion.insert(
+            id: 'p1',
+            name: 'Veer',
+            relationship: 'Son',
+            photoPath: testPhoto.path,
+            sortOrder: 0,
+          ),
+        );
+        await db.into(db.people).insert(
+          PeopleCompanion.insert(
+            id: 'p2',
+            name: 'Pooja',
+            relationship: 'Daughter',
+            photoPath: testPhoto.path,
+            sortOrder: 1,
+          ),
+        );
+        await db.into(db.people).insert(
+          PeopleCompanion.insert(
+            id: 'p3',
+            name: 'Rahul',
+            relationship: 'Grandson',
+            photoPath: testPhoto.path,
+            sortOrder: 2,
+          ),
+        );
+
+        final services = AppServices(database: db);
+        const content = GameContent(version: '1', marketItems: []);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: FacesOfMyFamilyScreen(
+              services: services,
+              content: content,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // One of the people is the target and has their photo rendered in the center
+        expect(find.byType(Image), findsOneWidget);
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    testWidgets('falls back to avatar initial when person genuinely has no photo',
+        (tester) async {
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+      await db.into(db.people).insert(
+        PeopleCompanion.insert(
+          id: 'v1',
+          name: 'Veer',
+          relationship: 'Son',
+          photoPath: '',
+          sortOrder: 0,
+        ),
+      );
+      await db.into(db.people).insert(
+        PeopleCompanion.insert(
+          id: 'v2',
+          name: 'Varun',
+          relationship: 'Brother',
+          photoPath: '',
+          sortOrder: 1,
+        ),
+      );
+      await db.into(db.people).insert(
+        PeopleCompanion.insert(
+          id: 'v3',
+          name: 'Vandana',
+          relationship: 'Sister',
+          photoPath: '',
+          sortOrder: 2,
+        ),
+      );
+
+      final services = AppServices(database: db);
+      const content = GameContent(version: '1', marketItems: []);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FacesOfMyFamilyScreen(
+            services: services,
+            content: content,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // No image rendered since no photos exist
+      expect(find.byType(Image), findsNothing);
+      // Person icon rendered on the central fallback avatar
+      expect(find.byIcon(Icons.person_rounded), findsOneWidget);
+      // Fallback initial "V" should be rendered (all candidate people start with V)
+      expect(find.text('V'), findsOneWidget);
+    });
+
+    testWidgets(
+        'preserves real database person even when database has fewer than 3 people',
+        (tester) async {
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+      // Add only 1 person in the DB
+      await db.into(db.people).insert(
+        PeopleCompanion.insert(
+          id: 'single_person',
+          name: 'Veer',
+          relationship: 'Grandson',
+          photoPath: '',
+          sortOrder: 0,
+        ),
+      );
+
+      final services = AppServices(database: db);
+      const content = GameContent(version: '1', marketItems: []);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FacesOfMyFamilyScreen(
+            services: services,
+            content: content,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Real person Veer is retained and playable, not dropped
+      expect(find.text('Veer'), findsWidgets);
+      // 3 choice options exist
+      final choiceCards = find.byWidgetPredicate(
+        (w) => w.key != null && w.key.toString().contains('face_option_'),
+      );
+      expect(choiceCards, findsNWidgets(3));
+    });
+
+    testWidgets('renders cleanly in portrait and landscape without overflow',
+        (tester) async {
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+      final services = AppServices(database: db);
+      const content = GameContent(version: '1', marketItems: []);
+
+      // Test Landscape
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FacesOfMyFamilyScreen(
+            services: services,
+            content: content,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Test Portrait
+      tester.view.physicalSize = const Size(800, 1280);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FacesOfMyFamilyScreen(
+            services: services,
+            content: content,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('answer options contain only text and no images or avatars',
+        (tester) async {
+      addTearDown(() => tester.pumpWidget(const SizedBox()));
+      final services = AppServices(database: db);
+      const content = GameContent(version: '1', marketItems: []);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FacesOfMyFamilyScreen(
+            services: services,
+            content: content,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final choiceCards = find.byWidgetPredicate(
+        (w) => w.key != null && w.key.toString().contains('face_option_'),
+      );
+      expect(choiceCards, findsNWidgets(3));
+
+      // Verify that NO answer option has an Image or CircleAvatar inside it
+      for (final card in choiceCards.evaluate()) {
+        final cardFinder = find.byWidget(card.widget);
+        expect(find.descendant(of: cardFinder, matching: find.byType(Image)),
+            findsNothing);
+        expect(
+            find.descendant(of: cardFinder, matching: find.byType(CircleAvatar)),
+            findsNothing);
+      }
     });
   });
 }

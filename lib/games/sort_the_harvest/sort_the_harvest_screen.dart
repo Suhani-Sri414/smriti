@@ -135,6 +135,10 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
     final crop = _item!.payload['crop'] as SortCrop;
     final trays = (_item!.payload['trays'] as List<Object?>).cast<SortTray>();
 
+    final media = MediaQuery.of(context);
+    final isLandscape = media.orientation == Orientation.landscape;
+    final isCompact = media.size.shortestSide < 600;
+
     return Scaffold(
       backgroundColor: const Color(0xFF261D18),
       body: SafeArea(
@@ -142,7 +146,12 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
           children: [
             // Top Bar
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+              padding: EdgeInsets.fromLTRB(
+                isCompact ? 14 : 20,
+                isCompact ? 8 : 12,
+                isCompact ? 14 : 20,
+                isCompact ? 6 : 8,
+              ),
               child: Row(
                 children: [
                   // Back button
@@ -151,9 +160,9 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
                     onTap: () => Navigator.of(context).pop(),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompact ? 12 : 16,
+                        vertical: isCompact ? 6 : 8,
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFFFDF8),
@@ -163,19 +172,19 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
                           width: 1.5,
                         ),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.arrow_back_rounded,
-                            size: 24,
+                            size: isCompact ? 22 : 24,
                             color: AppColors.primaryText,
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text(
                             'Home',
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: isCompact ? 16 : 18,
                               fontWeight: FontWeight.w700,
                               color: AppColors.primaryText,
                             ),
@@ -190,20 +199,23 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
                     child: Center(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
-                        child: Text(
-                          'Sort the Harvest · $_trialsDone sorted',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFF5EFE6),
-                            fontFamily: 'Noto Sans',
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Sort the Harvest · $_trialsDone sorted',
+                            style: TextStyle(
+                              fontSize: isCompact ? 19 : 22,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFFF5EFE6),
+                              fontFamily: 'Noto Sans',
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
 
-                  const SizedBox(width: 80),
+                  SizedBox(width: isCompact ? 16 : 80),
                 ],
               ),
             ),
@@ -211,8 +223,13 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
             // Main Play Area
             Expanded(
               child: Container(
-                margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                padding: const EdgeInsets.all(20),
+                margin: EdgeInsets.fromLTRB(
+                  isCompact ? 14 : 20,
+                  0,
+                  isCompact ? 14 : 20,
+                  isCompact ? 12 : 16,
+                ),
+                padding: EdgeInsets.all(isCompact ? 12 : 20),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF7F2E7),
                   borderRadius: BorderRadius.circular(28),
@@ -224,111 +241,120 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
                     ),
                   ],
                 ),
-                child: Column(
-                  children: [
-                    // Instruction Banner
-                    const FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        'Which basket does this harvest belong to?',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF261D18),
-                          fontFamily: 'Noto Sans',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Center Crop Card
-                    Expanded(
-                      flex: 3,
-                      child: Center(
-                        child: Container(
-                          key: Key('crop_card_${crop.id}'),
-                          width: 260,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFDF8),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: crop.color.withValues(alpha: 0.6),
-                              width: 3,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x15000000),
-                                blurRadius: 10,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
+                child: isLandscape
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Left side: Instruction, Center Crop, feedback
+                          Expanded(
+                            flex: 5,
                             child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    color: crop.color.withValues(alpha: 0.15),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    crop.icon,
-                                    size: 52,
-                                    color: crop.color,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  crop.name,
-                                  style: TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w800,
-                                    color: crop.color,
-                                    fontFamily: 'Noto Sans',
+                                const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'Which basket does this harvest belong to?',
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF261D18),
+                                      fontFamily: 'Noto Sans',
+                                    ),
                                   ),
                                 ),
+                                const SizedBox(height: 8),
+                                Expanded(
+                                  child: _buildCropCard(crop, isCompact: isCompact),
+                                ),
+                                if (_feedbackMessage != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      _feedbackMessage!,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF388E3C),
+                                        fontFamily: 'Noto Sans',
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-
-                    if (_feedbackMessage != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          _feedbackMessage!,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF388E3C),
-                            fontFamily: 'Noto Sans',
+                          SizedBox(width: isCompact ? 12 : 20),
+                          // Right side: Trays vertically
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              children: [
+                                for (int i = 0; i < trays.length; i++)
+                                  _buildTrayCard(
+                                    trays[i],
+                                    i,
+                                    isCompact: isCompact,
+                                    isRowLayout: true,
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ),
-
-                    // Trays Row
-                    Expanded(
-                      flex: 2,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        ],
+                      )
+                    : Column(
                         children: [
-                          for (int i = 0; i < trays.length; i++)
-                            _buildTrayCard(trays[i], i),
+                          // Instruction Banner
+                          const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Which basket does this harvest belong to?',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF261D18),
+                                fontFamily: 'Noto Sans',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Center Crop Card
+                          Expanded(
+                            flex: 3,
+                            child: _buildCropCard(crop, isCompact: isCompact),
+                          ),
+
+                          if (_feedbackMessage != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                _feedbackMessage!,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF388E3C),
+                                  fontFamily: 'Noto Sans',
+                                ),
+                              ),
+                            ),
+
+                          // Trays Row
+                          Expanded(
+                            flex: 2,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                for (int i = 0; i < trays.length; i++)
+                                  _buildTrayCard(
+                                    trays[i],
+                                    i,
+                                    isCompact: isCompact,
+                                    isRowLayout: false,
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ),
           ],
@@ -337,16 +363,85 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
     );
   }
 
-  Widget _buildTrayCard(SortTray tray, int index) {
+  Widget _buildCropCard(SortCrop crop, {required bool isCompact}) {
+    return Center(
+      child: Container(
+        key: Key('crop_card_${crop.id}'),
+        constraints: BoxConstraints(
+          maxWidth: isCompact ? 220 : 280,
+          maxHeight: isCompact ? 180 : 240,
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: isCompact ? 16 : 20,
+          vertical: isCompact ? 10 : 16,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFDF8),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: crop.color.withValues(alpha: 0.6),
+            width: 3,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x15000000),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: isCompact ? 64 : 80,
+                height: isCompact ? 64 : 80,
+                decoration: BoxDecoration(
+                  color: crop.color.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  crop.icon,
+                  size: isCompact ? 40 : 52,
+                  color: crop.color,
+                ),
+              ),
+              SizedBox(height: isCompact ? 6 : 10),
+              Text(
+                crop.name,
+                style: TextStyle(
+                  fontSize: isCompact ? 22 : 26,
+                  fontWeight: FontWeight.w800,
+                  color: crop.color,
+                  fontFamily: 'Noto Sans',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrayCard(
+    SortTray tray,
+    int index, {
+    required bool isCompact,
+    required bool isRowLayout,
+  }) {
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: isRowLayout ? (isCompact ? 4 : 8) : (isCompact ? 6 : 10),
+          vertical: isRowLayout ? (isCompact ? 4 : 6) : (isCompact ? 4 : 6),
+        ),
         child: InkWell(
           key: Key('sort_tray_$index'),
           onTap: () => _onTrayTapped(tray),
           borderRadius: BorderRadius.circular(20),
           child: Container(
-            height: 120,
             decoration: BoxDecoration(
               color: tray.color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
@@ -355,26 +450,55 @@ class _SortTheHarvestScreenState extends State<SortTheHarvestScreen> {
                 width: 2.5,
               ),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.shopping_basket_rounded,
-                  size: 40,
-                  color: tray.color,
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(isCompact ? 8 : 12),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: isRowLayout
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.shopping_basket_rounded,
+                              size: isCompact ? 30 : 38,
+                              color: tray.color,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              tray.label,
+                              style: TextStyle(
+                                fontSize: isCompact ? 18 : 22,
+                                fontWeight: FontWeight.w700,
+                                color: tray.color,
+                                fontFamily: 'Noto Sans',
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.shopping_basket_rounded,
+                              size: isCompact ? 32 : 40,
+                              color: tray.color,
+                            ),
+                            SizedBox(height: isCompact ? 4 : 8),
+                            Text(
+                              tray.label,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: isCompact ? 16 : 20,
+                                fontWeight: FontWeight.w700,
+                                color: tray.color,
+                                fontFamily: 'Noto Sans',
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  tray.label,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: tray.color,
-                    fontFamily: 'Noto Sans',
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

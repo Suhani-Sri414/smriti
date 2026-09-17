@@ -123,7 +123,9 @@ class _CallConfirmationScreenState extends State<CallConfirmationScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) {    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: const Color(0xFF261D18),
       body: SafeArea(
@@ -135,12 +137,12 @@ class _CallConfirmationScreenState extends State<CallConfirmationScreen> {
               padding: const EdgeInsets.fromLTRB(28, 12, 28, 8),
               child: Row(
                 children: [
-                  const Text(
+                  Text(
                     '13',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFFE5A93C),
+                      color: const Color(0xFFE5A93C),
                       fontFamily: 'Noto Sans',
                     ),
                   ),
@@ -186,154 +188,11 @@ class _CallConfirmationScreenState extends State<CallConfirmationScreen> {
                     final photo = existingFile(info.photoPath);
 
                     return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Large Avatar with white ring border
-                          Container(
-                            width: 176,
-                            height: 176,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE4DAC3),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 4,
-                              ),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x18000000),
-                                  blurRadius: 8,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: photo != null
-                                ? Image.file(
-                                    photo,
-                                    fit: BoxFit.cover,
-                                    width: 176,
-                                    height: 176,
-                                  )
-                                : _buildDefaultSilhouette(),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Contact Name
-                          Text(
-                            info.name,
-                            style: const TextStyle(
-                              fontSize: 44,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              fontFamily: 'Noto Sans',
-                            ),
-                          ),
-                          const SizedBox(height: 38),
-
-                          // Action Buttons
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // 1. Call Button
-                              InkWell(
-                                key: const Key('confirm_call_button'),
-                                onTap: () => _makeCall(info.name, info.phone),
-                                borderRadius: BorderRadius.circular(20),
-                                child: Container(
-                                  constraints: const BoxConstraints(
-                                    minWidth: 240,
-                                    maxWidth: 320,
-                                    minHeight: 72,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 14,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFFDF8),
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color(0x20000000),
-                                        blurRadius: 8,
-                                        offset: Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Center(
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          const Icon(
-                                            Icons.phone_rounded,
-                                            color: Color(0xFF2F5A3E),
-                                            size: 28,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            'Call ${info.name}',
-                                            style: const TextStyle(
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFF2F5A3E),
-                                              fontFamily: 'Noto Sans',
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-
-                              // 2. Not Now Button
-                              InkWell(
-                                key: const Key('cancel_call_button'),
-                                onTap: () => Navigator.of(context).pop(),
-                                borderRadius: BorderRadius.circular(20),
-                                child: Container(
-                                  constraints: const BoxConstraints(
-                                    minWidth: 220,
-                                    maxWidth: 280,
-                                    minHeight: 72,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 14,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: const Color(0xFFE4DAC3)
-                                          .withValues(alpha: 0.8),
-                                      width: 2,
-                                    ),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: const FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      'Not now',
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
-                                        fontFamily: 'Noto Sans',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: isLandscape
+                            ? _buildLandscapeContent(info, photo)
+                            : _buildPortraitContent(info, photo),
                       ),
                     );
                   },
@@ -341,6 +200,202 @@ class _CallConfirmationScreenState extends State<CallConfirmationScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLandscapeContent(_ContactInfo info, File? photo) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Left: Avatar
+        _buildAvatar(photo, size: 140),
+        const SizedBox(width: 36),
+
+        // Right: Name & Action Buttons
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  info.name,
+                  style: const TextStyle(
+                    fontSize: 38,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    fontFamily: 'Noto Sans',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildCallButton(info, height: 60),
+                  const SizedBox(width: 16),
+                  _buildCancelButton(height: 60),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPortraitContent(_ContactInfo info, File? photo) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 380),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Large Avatar
+          _buildAvatar(photo, size: 150),
+          const SizedBox(height: 18),
+
+          // Contact Name
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              info.name,
+              style: const TextStyle(
+                fontSize: 38,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                fontFamily: 'Noto Sans',
+              ),
+            ),
+          ),
+          const SizedBox(height: 26),
+
+          // Stacked Action Buttons
+          SizedBox(
+            width: double.infinity,
+            child: _buildCallButton(info, height: 64),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: _buildCancelButton(height: 56),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar(File? photo, {required double size}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE4DAC3),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white,
+          width: 3.5,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x18000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: photo != null
+          ? Image.file(
+              photo,
+              fit: BoxFit.cover,
+              width: size,
+              height: size,
+            )
+          : _buildDefaultSilhouette(),
+    );
+  }
+
+  Widget _buildCallButton(_ContactInfo info, {required double height}) {
+    return InkWell(
+      key: const Key('confirm_call_button'),
+      onTap: () => _makeCall(info.name, info.phone),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        height: height,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFDF8),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x20000000),
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.phone_rounded,
+                  color: Color(0xFF2F5A3E),
+                  size: 26,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Call ${info.name}',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF2F5A3E),
+                    fontFamily: 'Noto Sans',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCancelButton({required double height}) {
+    return InkWell(
+      key: const Key('cancel_call_button'),
+      onTap: () => Navigator.of(context).pop(),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        height: height,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFFE4DAC3).withValues(alpha: 0.8),
+            width: 2,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: const FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            'Not now',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+              fontFamily: 'Noto Sans',
+            ),
+          ),
         ),
       ),
     );

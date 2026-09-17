@@ -101,16 +101,17 @@ class _CaregiverPinDialogState extends State<CaregiverPinDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 380),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 160,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 160,
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                     // Header
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -188,6 +189,7 @@ class _CaregiverPinDialogState extends State<CaregiverPinDialog> {
                     _buildKeypad(),
                   ],
                 ),
+          ),
         ),
       ),
     );

@@ -121,6 +121,9 @@ class GamesMenuScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       body: SafeArea(
@@ -128,7 +131,12 @@ class GamesMenuScreen extends StatelessWidget {
           children: [
             // TOP BAR: Large return button, title, and clock
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 28, 6),
+              padding: EdgeInsets.fromLTRB(
+                isLandscape ? 20 : 16,
+                isLandscape ? 8 : 12,
+                isLandscape ? 28 : 20,
+                isLandscape ? 6 : 8,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -187,19 +195,105 @@ class GamesMenuScreen extends StatelessWidget {
               ),
             ),
 
-            // 4 GAME CARDS (2x2 Grid)
+            // 4 GAME CARDS: 1-column in Portrait, 2x2 Grid in Landscape
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(28, 8, 28, 20),
-                child: Row(
-                  children: [
-                    // Column 1: Market Basket & Sort the Harvest
-                    Expanded(
-                      child: Column(
+                padding: EdgeInsets.fromLTRB(
+                  isLandscape ? 28 : 20,
+                  6,
+                  isLandscape ? 28 : 20,
+                  isLandscape ? 16 : 20,
+                ),
+                child: isLandscape
+                    ? Row(
+                        children: [
+                          // Column 1: Market Basket & Sort the Harvest
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: _buildGameCard(
+                                    context: context,
+                                    key: const Key('game_card_market_basket'),
+                                    title: 'Market Basket',
+                                    subtitle: 'Remember what to buy',
+                                    color: AppColors.terracotta,
+                                    onTap: () => _playMarketBasket(context),
+                                    iconPainter: const _BasketPainter(),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                Expanded(
+                                  child: _buildGameCard(
+                                    context: context,
+                                    key: const Key('game_card_sort_harvest'),
+                                    title: 'Sort the Harvest',
+                                    subtitle: 'Sort into the right tray',
+                                    color: AppColors.leafGreen,
+                                    onTap: () => _playSortTheHarvest(context),
+                                    iconWidget: const Icon(
+                                      Icons.grid_view_rounded,
+                                      size: 52,
+                                      color: Color(0xFF386144),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          // Column 2: Faces of My Family & Sounds of Home
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: _buildGameCard(
+                                    context: context,
+                                    key: const Key('game_card_faces'),
+                                    title: 'Faces of My Family',
+                                    subtitle: 'Recognize family members',
+                                    color: AppColors.indigo,
+                                    onTap: () => _playFacesOfMyFamily(context),
+                                    iconWidget: Container(
+                                      width: 64,
+                                      height: 64,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFE9DFCE),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.people_alt_rounded,
+                                        size: 42,
+                                        color: AppColors.indigoDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                Expanded(
+                                  child: _buildGameCard(
+                                    context: context,
+                                    key: const Key('game_card_sounds'),
+                                    title: 'Sounds of Home',
+                                    subtitle: 'Listen and identify sounds',
+                                    color: AppColors.marigold,
+                                    onTap: () => _playSoundsOfHome(context),
+                                    iconWidget: const Icon(
+                                      Icons.volume_up_rounded,
+                                      size: 52,
+                                      color: Color(0xFF9A6C17),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
                         children: [
                           Expanded(
-                            child: _buildGameCard(
-                              context: context,
+                            child: _buildGameCardList(
                               key: const Key('game_card_market_basket'),
                               title: 'Market Basket',
                               subtitle: 'Remember what to buy',
@@ -208,10 +302,24 @@ class GamesMenuScreen extends StatelessWidget {
                               iconPainter: const _BasketPainter(),
                             ),
                           ),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 12),
                           Expanded(
-                            child: _buildGameCard(
-                              context: context,
+                            child: _buildGameCardList(
+                              key: const Key('game_card_faces'),
+                              title: 'Faces of My Family',
+                              subtitle: 'Recognize family members',
+                              color: AppColors.indigo,
+                              onTap: () => _playFacesOfMyFamily(context),
+                              iconWidget: const Icon(
+                                Icons.people_alt_rounded,
+                                size: 36,
+                                color: AppColors.indigoDark,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: _buildGameCardList(
                               key: const Key('game_card_sort_harvest'),
                               title: 'Sort the Harvest',
                               subtitle: 'Sort into the right tray',
@@ -219,46 +327,14 @@ class GamesMenuScreen extends StatelessWidget {
                               onTap: () => _playSortTheHarvest(context),
                               iconWidget: const Icon(
                                 Icons.grid_view_rounded,
-                                size: 56,
+                                size: 36,
                                 color: Color(0xFF386144),
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 18),
-                    // Column 2: Faces of My Family & Sounds of Home
-                    Expanded(
-                      child: Column(
-                        children: [
+                          const SizedBox(height: 12),
                           Expanded(
-                            child: _buildGameCard(
-                              context: context,
-                              key: const Key('game_card_faces'),
-                              title: 'Faces of My Family',
-                              subtitle: 'Recognize family members',
-                              color: AppColors.indigo,
-                              onTap: () => _playFacesOfMyFamily(context),
-                              iconWidget: Container(
-                                width: 72,
-                                height: 72,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFE9DFCE),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.people_alt_rounded,
-                                  size: 48,
-                                  color: AppColors.indigoDark,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          Expanded(
-                            child: _buildGameCard(
-                              context: context,
+                            child: _buildGameCardList(
                               key: const Key('game_card_sounds'),
                               title: 'Sounds of Home',
                               subtitle: 'Listen and identify sounds',
@@ -266,17 +342,102 @@ class GamesMenuScreen extends StatelessWidget {
                               onTap: () => _playSoundsOfHome(context),
                               iconWidget: const Icon(
                                 Icons.volume_up_rounded,
-                                size: 56,
+                                size: 36,
                                 color: Color(0xFF9A6C17),
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameCardList({
+    required Key key,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+    CustomPainter? iconPainter,
+    Widget? iconWidget,
+  }) {
+    return InkWell(
+      key: key,
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFDF8),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color, width: 2.5),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: iconPainter != null
+                  ? CustomPaint(
+                      size: const Size(36, 24),
+                      painter: iconPainter,
+                    )
+                  : iconWidget ?? const SizedBox.shrink(),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                      fontFamily: 'Noto Sans',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.secondaryText,
+                      fontFamily: 'Noto Sans',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 20,
+              color: color,
             ),
           ],
         ),
@@ -312,7 +473,7 @@ class GamesMenuScreen extends StatelessWidget {
               child: Center(
                 child: iconPainter != null
                     ? CustomPaint(
-                        size: const Size(120, 60),
+                        size: const Size(100, 50),
                         painter: iconPainter,
                       )
                     : iconWidget ?? const SizedBox.shrink(),
@@ -321,7 +482,7 @@ class GamesMenuScreen extends StatelessWidget {
             // Lower banner with game name & subtitle
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
               decoration: BoxDecoration(
                 color: color,
                 borderRadius:
@@ -330,24 +491,30 @@ class GamesMenuScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onColor,
-                      letterSpacing: 0.3,
-                      fontFamily: 'Noto Sans',
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onColor,
+                        letterSpacing: 0.3,
+                        fontFamily: 'Noto Sans',
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.onColor.withAlpha(220),
-                      fontFamily: 'Noto Sans',
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.onColor.withAlpha(220),
+                        fontFamily: 'Noto Sans',
+                      ),
                     ),
                   ),
                 ],

@@ -26,50 +26,95 @@ class EventPusher {
 
   /// Pushes in dependency order: sessions before the trials that reference
   /// them, so a foreign key on the server never sees an orphan.
+  /// Reminder events push independently so a failure in one category does not
+  /// block the other.
   Future<int> push() async {
     final patientId = await configs.getValue(patientIdKey);
     if (patientId == null || patientId.isEmpty) return 0;
 
     var pushed = 0;
-    pushed += await _pushSessions(patientId);
-    pushed += await _pushTrials(patientId);
-    pushed += await _pushReminderEvents(patientId);
+    Object? firstError;
+
+    // 1. Sessions and Trials
+    try {
+      pushed += await _pushSessions(patientId);
+      pushed += await _pushTrials(patientId);
+    } catch (e) {
+      firstError ??= e;
+    }
+
+    // 2. Reminder Events
+    try {
+      pushed += await _pushReminderEvents(patientId);
+    } catch (e) {
+      firstError ??= e;
+    }
+
+    if (firstError != null) {
+      throw firstError;
+    }
     return pushed;
   }
 
   Future<int> _pushSessions(String patientId) async {
-    final rows = await eventRepo.unsyncedSessions(limit: batchSize);
-    if (rows.isEmpty) return 0;
+    await eventRepo.closeDanglingSessions();
+    var pushed = 0;
+    while (true) {
+      final rows = await eventRepo.unsyncedSessions(
+        limit: batchSize,
+        onlyCompleted: true,
+      );
+      if (rows.isEmpty) break;
 
-    await gateway.upsert(
-      RemoteRows.sessionsTable,
-      [for (final row in rows) RemoteRows.session(row, patientId)],
-    );
-    await eventRepo.markSessionsSynced([for (final row in rows) row.id]);
-    return rows.length;
+      // Sessions allow device updates (`s_update` RLS policy) so finalized
+      // sessions update any row previously ingested while in-progress.
+      await gateway.upsert(
+        RemoteRows.sessionsTable,
+        [for (final row in rows) RemoteRows.session(row, patientId)],
+        ignoreDuplicates: false,
+      );
+      await eventRepo.markSessionsSynced([for (final row in rows) row.id]);
+      pushed += rows.length;
+      if (rows.length < batchSize) break;
+    }
+    return pushed;
   }
 
   Future<int> _pushTrials(String patientId) async {
-    final rows = await eventRepo.unsyncedTrials(limit: batchSize);
-    if (rows.isEmpty) return 0;
+    var pushed = 0;
+    while (true) {
+      final rows = await eventRepo.unsyncedTrials(limit: batchSize);
+      if (rows.isEmpty) break;
 
-    await gateway.upsert(
-      RemoteRows.eventsTable,
-      [for (final row in rows) RemoteRows.trial(row, patientId)],
-    );
-    await eventRepo.markTrialsSynced([for (final row in rows) row.id]);
-    return rows.length;
+      await gateway.upsert(
+        RemoteRows.eventsTable,
+        [for (final row in rows) RemoteRows.trial(row, patientId)],
+      );
+      await eventRepo.markTrialsSynced([for (final row in rows) row.id]);
+      pushed += rows.length;
+      if (rows.length < batchSize) break;
+    }
+    return pushed;
   }
 
   Future<int> _pushReminderEvents(String patientId) async {
-    final rows = await eventRepo.unsyncedReminderEvents(limit: batchSize);
-    if (rows.isEmpty) return 0;
+    await eventRepo.closeDanglingReminderEvents();
+    var pushed = 0;
+    while (true) {
+      final rows = await eventRepo.unsyncedReminderEvents(
+        limit: batchSize,
+        onlyFinalized: true,
+      );
+      if (rows.isEmpty) break;
 
-    await gateway.upsert(
-      RemoteRows.reminderEventsTable,
-      [for (final row in rows) RemoteRows.reminderEvent(row, patientId)],
-    );
-    await eventRepo.markReminderEventsSynced([for (final row in rows) row.id]);
-    return rows.length;
+      await gateway.upsert(
+        RemoteRows.reminderEventsTable,
+        [for (final row in rows) RemoteRows.reminderEvent(row, patientId)],
+      );
+      await eventRepo.markReminderEventsSynced([for (final row in rows) row.id]);
+      pushed += rows.length;
+      if (rows.length < batchSize) break;
+    }
+    return pushed;
   }
 }

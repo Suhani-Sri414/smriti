@@ -13,8 +13,10 @@ import 'diagnostics/diagnostics_screen.dart';
 import 'call_confirmation_screen.dart';
 import 'games_menu_screen.dart';
 import 'my_people_screen.dart';
+import 'screen_reader_button.dart';
 import 'today_screen.dart';
 import 'voice_interaction_overlay.dart';
+import 'voicebot/voicebot_sheet.dart';
 
 /// Screen 01: The Elder Home Screen.
 ///
@@ -51,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _voiceCommander.stopListening();
+    widget.services.screenReaderService.stop();
     super.dispose();
   }
 
@@ -139,6 +142,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openVoiceBotSheet() async {
+    final patientId =
+        await widget.services.db.appConfigsDao.getValue('patientId');
+    final langCode =
+        await widget.services.db.appConfigsDao.getValue('langCode');
+    widget.services.voiceBotController.updateContext(
+      userId: patientId,
+      language: langCode,
+    );
+    if (!mounted) return;
+    await VoiceBotSheet.show(
+      context,
+      controller: widget.services.voiceBotController,
+    );
+  }
+
   Future<void> _onMyPeopleTapped(_HomeData data) async {
     if (!mounted) return;
     await Navigator.of(context).push(
@@ -184,8 +203,17 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good evening, ';
   }
 
+  String _formatMinutes(int minutes) {
+    final h = (minutes ~/ 60).toString().padLeft(2, '0');
+    final m = (minutes % 60).toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
       body: SafeArea(
@@ -207,118 +235,223 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     // TOP BAR: Greeting & Landscape Graphic
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
+                      padding: EdgeInsets.fromLTRB(
+                        24,
+                        isLandscape ? 8 : 14,
+                        24,
+                        isLandscape ? 6 : 8,
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          GestureDetector(
-                            onLongPress: _openDebugSheet,
-                            behavior: HitTestBehavior.opaque,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _formatGreeting().trim(),
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.primaryText,
-                                    fontFamily: 'Noto Sans',
-                                  ),
-                                ),
-                                Text(
-                                  name,
-                                  key: const Key('home_title'),
-                                  style: const TextStyle(
-                                    fontSize: 34,
-                                    fontWeight: FontWeight.w900,
-                                    color: AppColors.primaryText,
-                                    fontFamily: 'Noto Sans',
-                                    letterSpacing: -0.6,
-                                  ),
-                                ),
-                                // Preserved for shell_test assertions
-                                Opacity(
-                                  opacity: 0.0,
-                                  child: SizedBox(
-                                    height: 0,
-                                    width: 0,
-                                    child: Column(
-                                      children: [
-                                        Text(
-                                          'content v${data.contentVersion ?? '-'} · ${data.people.length} people',
-                                          key: const Key('home_content_version'),
-                                        ),
-                                        if (data.routineItems.isEmpty)
-                                          const Text(
-                                            'No routine yet',
-                                            key: Key('routine_empty'),
-                                          )
-                                        else
-                                          for (final item in data.routineItems)
-                                            Row(
-                                              key: Key('routine_${item.id}'),
-                                              children: [
-                                                Text(_formatMinutes(item.timeMin)),
-                                                Text(item.labelKey),
-                                              ],
-                                            ),
-                                        if (data.medications.isEmpty)
-                                          const Text(
-                                            'No medicines yet',
-                                            key: Key('medications_empty'),
-                                          )
-                                        else
-                                          for (final medication in data.medications)
-                                            Row(
-                                              key: Key('medication_${medication.id}'),
-                                              children: [
-                                                Text(
-                                                    '${medication.name} · ${medication.dose}'),
-                                                Text(_formatMinutes(
-                                                    medication.chosenTimeMin)),
-                              ],
-                            ),
-                                      ],
+                          Expanded(
+                            child: GestureDetector(
+                              onLongPress: _openDebugSheet,
+                              behavior: HitTestBehavior.opaque,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _formatGreeting().trim(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: isLandscape ? 18 : 22,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primaryText,
+                                      fontFamily: 'Noto Sans',
                                     ),
                                   ),
-                                ),
-                              ],
+                                  Text(
+                                    name,
+                                    key: const Key('home_title'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: isLandscape ? 26 : 34,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppColors.primaryText,
+                                      fontFamily: 'Noto Sans',
+                                      letterSpacing: -0.6,
+                                    ),
+                                  ),
+                                  // Preserved for shell_test assertions
+                                  Opacity(
+                                    opacity: 0.0,
+                                    child: SizedBox(
+                                      height: 0,
+                                      width: 0,
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            'content v${data.contentVersion ?? '-'} · ${data.people.length} people',
+                                            key: const Key('home_content_version'),
+                                          ),
+                                          if (data.routineItems.isEmpty)
+                                            const Text(
+                                              'No routine yet',
+                                              key: Key('routine_empty'),
+                                            )
+                                          else
+                                            for (final item in data.routineItems)
+                                              Row(
+                                                key: Key('routine_${item.id}'),
+                                                children: [
+                                                  Text(_formatMinutes(item.timeMin)),
+                                                  Text(item.labelKey),
+                                                ],
+                                              ),
+                                          if (data.medications.isEmpty)
+                                            const Text(
+                                              'No medicines yet',
+                                              key: Key('medications_empty'),
+                                            )
+                                          else
+                                            for (final medication in data.medications)
+                                              Row(
+                                                key: Key('medication_${medication.id}'),
+                                                children: [
+                                                  Text(
+                                                      '${medication.name} · ${medication.dose}'),
+                                                  Text(_formatMinutes(
+                                                      medication.chosenTimeMin)),
+                                                ],
+                                              ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(
-                            width: 120,
-                            height: 65,
-                            child: CustomPaint(
-                              painter: _HeaderSunHillsPainter(),
-                            ),
+                          const SizedBox(width: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ScreenReaderButton(
+                                key: const Key('home_screen_reader_button'),
+                                service: widget.services.screenReaderService,
+                                compact: isLandscape,
+                                text:
+                                    'Welcome to Smriti. You can tap the Sathi button below to talk to your companion, or view your daily reminders.',
+                              ),
+                              const SizedBox(width: 10),
+                              GestureDetector(
+                                key: const Key('home_voicebot_button'),
+                                onTap: _openVoiceBotSheet,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isLandscape ? 12 : 16,
+                                    vertical: isLandscape ? 8 : 10,
+                                  ),
+                                  margin: const EdgeInsets.only(right: 12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.raisedSurface,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: AppColors.terracotta.withValues(alpha: 0.4),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x0C000000),
+                                        blurRadius: 6,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.volunteer_activism_rounded,
+                                        color: AppColors.terracotta,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Talk to Sathi',
+                                        style: TextStyle(
+                                          fontSize: isLandscape ? 14 : 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.terracotta,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: isLandscape ? 90 : 120,
+                                height: isLandscape ? 45 : 65,
+                                child: const CustomPaint(
+                                  painter: _HeaderSunHillsPainter(),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
 
-                    // 4 CARDS: Vertically aligned full-width cards
+                    // 4 CARDS: 1-column in Portrait, 2-column in Landscape
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          children: [
-                            Expanded(child: _buildPlayCard()),
-                            const SizedBox(height: 12),
-                            Expanded(child: _buildMyPeopleCard(data)),
-                            const SizedBox(height: 12),
-                            Expanded(child: _buildTodayCard(data)),
-                            const SizedBox(height: 12),
-                            Expanded(child: _buildCallCard(data)),
-                          ],
-                        ),
+                        child: isLandscape
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        Expanded(
+                                          child: _buildPlayCard(compact: true),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Expanded(
+                                          child: _buildMyPeopleCard(data,
+                                              compact: true),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        Expanded(
+                                          child: _buildTodayCard(data,
+                                              compact: true),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Expanded(
+                                          child: _buildCallCard(data,
+                                              compact: true),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                children: [
+                                  Expanded(child: _buildPlayCard()),
+                                  const SizedBox(height: 12),
+                                  Expanded(child: _buildMyPeopleCard(data)),
+                                  const SizedBox(height: 12),
+                                  Expanded(child: _buildTodayCard(data)),
+                                  const SizedBox(height: 12),
+                                  Expanded(child: _buildCallCard(data)),
+                                ],
+                              ),
                       ),
                     ),
 
                     // BOTTOM BAR: Floating center microphone button
-                    _buildBottomBar(),
+                    _buildBottomBar(compact: isLandscape),
                   ],
                 ),
                 VoiceInteractionOverlay(
@@ -356,11 +489,12 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────
   // CARD 1: Play (Terracotta)
   // ─────────────────────────────────────────────
-  Widget _buildPlayCard() {
+  Widget _buildPlayCard({bool compact = false}) {
     return _buildHomeCard(
       key: const Key('play_market_basket'),
       onTap: _openGamesMenu,
       backgroundColor: AppColors.terracotta,
+      compact: compact,
       avatarChild: const FittedBox(
         child: SizedBox(
           width: 60,
@@ -381,13 +515,14 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────
   // CARD 2: My People (Indigo)
   // ─────────────────────────────────────────────
-  Widget _buildMyPeopleCard(_HomeData data) {
+  Widget _buildMyPeopleCard(_HomeData data, {bool compact = false}) {
     return _buildHomeCard(
       onTap: () => _onMyPeopleTapped(data),
       backgroundColor: AppColors.indigo,
-      avatarChild: const Icon(
+      compact: compact,
+      avatarChild: Icon(
         Icons.person,
-        size: 38,
+        size: compact ? 30 : 38,
         color: AppColors.indigoDark,
       ),
       title: 'My People',
@@ -401,10 +536,11 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────
   // CARD 3: Today (Marigold)
   // ─────────────────────────────────────────────
-  Widget _buildTodayCard(_HomeData data) {
+  Widget _buildTodayCard(_HomeData data, {bool compact = false}) {
     return _buildHomeCard(
       onTap: () => _onTodayTapped(data),
       backgroundColor: AppColors.marigold,
+      compact: compact,
       avatarChild: const FittedBox(
         child: SizedBox(
           width: 72,
@@ -425,17 +561,18 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────
   // CARD 4: Call Bina (Leaf Green)
   // ─────────────────────────────────────────────
-  Widget _buildCallCard(_HomeData data) {
+  Widget _buildCallCard(_HomeData data, {bool compact = false}) {
     final contact = data.primaryContactName;
     return _buildHomeCard(
       onTap: () => _onCallTapped(data),
       backgroundColor: AppColors.leafGreen,
+      compact: compact,
       avatarChild: Transform.rotate(
         angle: -0.4,
-        child: const Icon(
+        child: Icon(
           Icons.phone_rounded,
-          size: 34,
-          color: Color(0xFF284831),
+          size: compact ? 26 : 34,
+          color: const Color(0xFF284831),
         ),
       ),
       title: 'Call $contact',
@@ -456,23 +593,27 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color titleColor,
     required Color subtitleColor,
     required Color chevronColor,
+    bool compact = false,
   }) {
     return InkWell(
       key: key,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(compact ? 20 : 24),
       child: Container(
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(compact ? 20 : 24),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 14 : 18,
+          vertical: compact ? 8 : 12,
+        ),
         child: Row(
           children: [
             // Circle Avatar Badge
             Container(
-              width: 64,
-              height: 64,
+              width: compact ? 50 : 64,
+              height: compact ? 50 : 64,
               decoration: const BoxDecoration(
                 color: Color(0xFFF3E7D3),
                 shape: BoxShape.circle,
@@ -480,7 +621,7 @@ class _HomeScreenState extends State<HomeScreen> {
               alignment: Alignment.center,
               child: avatarChild,
             ),
-            const SizedBox(width: 18),
+            SizedBox(width: compact ? 12 : 18),
             // Title & Subtitle
             Expanded(
               child: Column(
@@ -490,7 +631,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 26,
+                      fontSize: compact ? 22 : 26,
                       fontWeight: FontWeight.w800,
                       color: titleColor,
                       fontFamily: 'Noto Sans',
@@ -499,11 +640,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: compact ? 12 : 14,
                       fontWeight: FontWeight.w500,
                       color: subtitleColor,
                       fontFamily: 'Noto Sans',
@@ -514,11 +655,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             // Right Chevron
             Icon(
               Icons.arrow_forward_ios_rounded,
-              size: 24,
+              size: compact ? 20 : 24,
               color: chevronColor,
             ),
           ],
@@ -530,16 +671,20 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────
   // FLOATING CENTER MICROPHONE BUTTON
   // ─────────────────────────────────────────────
-  Widget _buildBottomBar() {
+  Widget _buildBottomBar({bool compact = false}) {
+    final size = compact ? 52.0 : 66.0;
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 14),
+      padding: EdgeInsets.only(
+        top: compact ? 4 : 8,
+        bottom: compact ? 6 : 14,
+      ),
       child: Center(
         child: GestureDetector(
           key: const Key('home_mic_button'),
           onTap: _onMicTapped,
           child: Container(
-            width: 66,
-            height: 66,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
               color: const Color(0xFFFFFDF8),
               shape: BoxShape.circle,
@@ -552,21 +697,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            child: const Icon(
+            child: Icon(
               Icons.mic_none_rounded,
-              size: 36,
+              size: compact ? 28 : 36,
               color: AppColors.primaryText,
             ),
           ),
         ),
       ),
     );
-  }
-
-  static String _formatMinutes(int minutes) {
-    final h = (minutes ~/ 60).toString().padLeft(2, '0');
-    final m = (minutes % 60).toString().padLeft(2, '0');
-    return '$h:$m';
   }
 }
 

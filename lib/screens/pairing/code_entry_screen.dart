@@ -123,11 +123,17 @@ class _CodeEntryScreenState extends State<CodeEntryScreen> {
                 style: TextStyle(fontSize: 16, color: AppColors.secondaryText),
               ),
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  for (var i = 0; i < _boxes; i++) _buildBox(i),
-                ],
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (var i = 0; i < _boxes; i++) ...[
+                      if (i > 0) const SizedBox(width: 8),
+                      _buildBox(i),
+                    ],
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
               if (_error != null)

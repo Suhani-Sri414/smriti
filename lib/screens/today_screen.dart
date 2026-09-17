@@ -81,7 +81,7 @@ class _TodayScreenState extends State<TodayScreen> {
 
     final takenMedicationIds = <String>{};
     for (final event in reminderEvents) {
-      if (event.outcome == 'taken') {
+      if (event.outcome == 'taken' || event.outcome == 'confirmed') {
         takenMedicationIds.add(event.medicationId);
       }
     }
@@ -191,6 +191,7 @@ class _TodayScreenState extends State<TodayScreen> {
   Widget build(BuildContext context) {
     final now = _getNow();
     final currentMinutes = now.hour * 60 + now.minute;
+    final isCompact = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
@@ -199,9 +200,13 @@ class _TodayScreenState extends State<TodayScreen> {
           children: [
             // TOP BAR: Accessible Back Button, Title with Day, Live Clock
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 28, 12),
+              padding: EdgeInsets.fromLTRB(
+                isCompact ? 16 : 24,
+                isCompact ? 12 : 16,
+                isCompact ? 16 : 28,
+                12,
+              ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   // Back Button (large touch target >= 56dp)
                   InkWell(
@@ -209,24 +214,27 @@ class _TodayScreenState extends State<TodayScreen> {
                     onTap: () => Navigator.of(context).pop(),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 10),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompact ? 14 : 18,
+                        vertical: isCompact ? 8 : 10,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFFFDF8),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                             color: AppColors.primaryText, width: 2.2),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.arrow_back_rounded,
-                              size: 28, color: AppColors.primaryText),
-                          SizedBox(width: 8),
+                              size: isCompact ? 24 : 28,
+                              color: AppColors.primaryText),
+                          const SizedBox(width: 8),
                           Text(
                             'Home',
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: isCompact ? 18 : 20,
                               fontWeight: FontWeight.w700,
                               color: AppColors.primaryText,
                               fontFamily: 'Noto Sans',
@@ -236,25 +244,33 @@ class _TodayScreenState extends State<TodayScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 12),
 
                   // Title: "Today · [Day]"
-                  Text(
-                    _formatDayTitle(now),
-                    key: const Key('today_title'),
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primaryText,
-                      fontFamily: 'Noto Sans',
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.center,
+                      child: Text(
+                        _formatDayTitle(now),
+                        key: const Key('today_title'),
+                        style: TextStyle(
+                          fontSize: isCompact ? 22 : 28,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryText,
+                          fontFamily: 'Noto Sans',
+                        ),
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 12),
 
                   // Clock
                   Text(
                     _formatMinutes(currentMinutes),
                     key: const Key('today_clock'),
-                    style: const TextStyle(
-                      fontSize: 24,
+                    style: TextStyle(
+                      fontSize: isCompact ? 20 : 24,
                       fontWeight: FontWeight.w700,
                       color: AppColors.primaryText,
                       fontFamily: 'Noto Sans',
@@ -340,6 +356,8 @@ class _TodayScreenState extends State<TodayScreen> {
 
   /// Renders chronological timeline list with the terracotta "Now" rule.
   Widget _buildTimelineList(List<TodayTimelineItem> items, int currentMinutes) {
+    final isCompact = MediaQuery.of(context).size.width < 600;
+
     // Find split index where items transition from past (< currentMinutes) to future (>= currentMinutes)
     int nowIndex = items.length;
     for (int i = 0; i < items.length; i++) {
@@ -359,7 +377,7 @@ class _TodayScreenState extends State<TodayScreen> {
 
       final item = items[i];
       final isPast = item.timeMin < currentMinutes;
-      listWidgets.add(_buildTimelineCard(item, isPast));
+      listWidgets.add(_buildTimelineCard(item, isPast, isCompact: isCompact));
     }
 
     // If all items were in the past, place the "Now" rule at the bottom
@@ -368,7 +386,12 @@ class _TodayScreenState extends State<TodayScreen> {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(40, 10, 40, 24),
+      padding: EdgeInsets.fromLTRB(
+        isCompact ? 16 : 40,
+        10,
+        isCompact ? 16 : 40,
+        24,
+      ),
       children: listWidgets,
     );
   }
@@ -433,7 +456,11 @@ class _TodayScreenState extends State<TodayScreen> {
 
   /// Single item card.
   /// "Done things fade; a terracotta rule marks now. Nothing is ever marked missed."
-  Widget _buildTimelineCard(TodayTimelineItem item, bool isPast) {
+  Widget _buildTimelineCard(
+    TodayTimelineItem item,
+    bool isPast, {
+    bool isCompact = false,
+  }) {
     final isFaded = item.isDone || (isPast && item.type == TodayItemType.routine);
 
     final cardColor = isFaded
@@ -451,7 +478,10 @@ class _TodayScreenState extends State<TodayScreen> {
       child: Container(
         key: Key('today_item_${item.id}'),
         margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: EdgeInsets.symmetric(
+          horizontal: isCompact ? 14 : 24,
+          vertical: isCompact ? 12 : 16,
+        ),
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(20),
@@ -470,7 +500,10 @@ class _TodayScreenState extends State<TodayScreen> {
           children: [
             // Time Badge
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: EdgeInsets.symmetric(
+                horizontal: isCompact ? 10 : 14,
+                vertical: isCompact ? 6 : 8,
+              ),
               decoration: BoxDecoration(
                 color: isFaded
                     ? AppColors.wovenMat.withValues(alpha: 0.4)
@@ -480,7 +513,7 @@ class _TodayScreenState extends State<TodayScreen> {
               child: Text(
                 _formatMinutes(item.timeMin),
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: isCompact ? 15 : 18,
                   fontWeight: FontWeight.w700,
                   color: isFaded
                       ? AppColors.secondaryText
@@ -489,12 +522,12 @@ class _TodayScreenState extends State<TodayScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 20),
+            SizedBox(width: isCompact ? 12 : 20),
 
             // Icon Badge
             Container(
-              width: 50,
-              height: 50,
+              width: isCompact ? 42 : 50,
+              height: isCompact ? 42 : 50,
               decoration: BoxDecoration(
                 color: item.type == TodayItemType.medication
                     ? (isFaded
@@ -507,13 +540,13 @@ class _TodayScreenState extends State<TodayScreen> {
               ),
               child: Icon(
                 item.icon,
-                size: 28,
+                size: isCompact ? 24 : 28,
                 color: item.type == TodayItemType.medication
                     ? AppColors.terracotta
                     : AppColors.primaryText,
               ),
             ),
-            const SizedBox(width: 20),
+            SizedBox(width: isCompact ? 12 : 20),
 
             // Title & Subtitle
             Expanded(
@@ -524,7 +557,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   Text(
                     item.title,
                     style: TextStyle(
-                      fontSize: 22,
+                      fontSize: isCompact ? 18 : 22,
                       fontWeight: FontWeight.w700,
                       color: isFaded
                           ? AppColors.secondaryText
@@ -536,8 +569,8 @@ class _TodayScreenState extends State<TodayScreen> {
                     const SizedBox(height: 2),
                     Text(
                       item.subtitle!,
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        fontSize: isCompact ? 14 : 16,
                         fontWeight: FontWeight.w500,
                         color: AppColors.secondaryText,
                         fontFamily: 'Noto Sans',
