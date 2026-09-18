@@ -17,11 +17,9 @@ import 'package:smriti/core/repo/ability_repo.dart';
 import 'package:smriti/screens/pairing/code_entry_screen.dart';
 import 'package:smriti/screens/reminder_screen.dart';
 import 'package:smriti/screens/startup_gate.dart';
-import 'package:smriti/core/voice/screen_reader_service.dart';
 
 import '../core/auth/pairing_service_test.dart'
     show FakePairingGateway, successBody;
-import '../core/voice/screen_reader_service_test.dart' show FakeTtsAdapter;
 import '../core/repo/_test_db.dart';
 import '../core/reminders/_fake_alarm_api.dart';
 
@@ -246,38 +244,32 @@ void main() {
       );
     });
 
-    testWidgets('screen reader button reads aloud home instructions and toggles',
+    testWidgets(
+        'top bar displays greeting and sun illustration without audio button',
         (tester) async {
-      final fakeTts = FakeTtsAdapter();
-      final screenReader = ScreenReaderService(ttsAdapter: fakeTts);
-      final services = AppServices(
-        database: db,
-        screenReaderService: screenReader,
-      );
+      await pumpHome(tester);
 
-      await db.appConfigsDao.setValue('patientId', 'pat-1');
-      await db.appConfigsDao.setValue('elderName', 'Test Patient');
-      await tester.pumpWidget(
-        MaterialApp(home: HomeScreen(services: services)),
-      );
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('home_screen_reader_button')), findsNothing);
+      expect(find.byKey(const Key('home_title')), findsOneWidget);
+    });
 
-      final buttonFinder = find.byKey(const Key('home_screen_reader_button'));
-      expect(buttonFinder, findsOneWidget);
+    testWidgets('shows 5th Talk to Sathi card and tapping opens voicebot sheet',
+        (tester) async {
+      await seedContent();
+      await pumpHome(tester);
 
-      await tester.tap(buttonFinder);
+      expect(find.text('Talk to Sathi'), findsOneWidget);
+      expect(find.text('Your AI companion'), findsOneWidget);
+      expect(find.byIcon(Icons.support_agent_rounded), findsOneWidget);
+
+      final sathiCard = find.byKey(const Key('home_voicebot_button'));
+      expect(sathiCard, findsOneWidget);
+
+      await tester.tap(sathiCard);
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-      expect(screenReader.isSpeaking, isTrue);
-      expect(fakeTts.speakCalls, [
-        'Welcome to Smriti. You can tap the Sathi button below to talk to your companion, or view your daily reminders.'
-      ]);
-
-      await tester.tap(buttonFinder);
-      await tester.pump();
-
-      expect(screenReader.isSpeaking, isFalse);
-      expect(fakeTts.stopCalls, 1);
+      expect(find.text('Smriti Companion'), findsOneWidget);
     });
   });
 

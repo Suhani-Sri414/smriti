@@ -34,6 +34,11 @@ class AppColors {
   static const Color leafGreenDark = Color(0xFF2F5139);
   static const Color leafGreenPressed = Color(0xFF3F6C4D);
 
+  // Sathi (Warm Purple)
+  static const Color warmPurple = Color(0xFF7A4E82);
+  static const Color warmPurpleDark = Color(0xFF4D2F52);
+  static const Color sathiPurple = warmPurple;
+
   // Supporting
   static const Color onColor = Color(0xFFFFF8ED);
   static const Color medicineBlush = Color(0xFFF5E4DC);

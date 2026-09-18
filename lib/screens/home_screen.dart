@@ -13,7 +13,6 @@ import 'diagnostics/diagnostics_screen.dart';
 import 'call_confirmation_screen.dart';
 import 'games_menu_screen.dart';
 import 'my_people_screen.dart';
-import 'screen_reader_button.dart';
 import 'today_screen.dart';
 import 'voice_interaction_overlay.dart';
 import 'voicebot/voicebot_sheet.dart';
@@ -327,110 +326,53 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ScreenReaderButton(
-                                key: const Key('home_screen_reader_button'),
-                                service: widget.services.screenReaderService,
-                                compact: isLandscape,
-                                text:
-                                    'Welcome to Smriti. You can tap the Sathi button below to talk to your companion, or view your daily reminders.',
-                              ),
-                              const SizedBox(width: 10),
-                              GestureDetector(
-                                key: const Key('home_voicebot_button'),
-                                onTap: _openVoiceBotSheet,
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: isLandscape ? 12 : 16,
-                                    vertical: isLandscape ? 8 : 10,
-                                  ),
-                                  margin: const EdgeInsets.only(right: 12),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.raisedSurface,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: AppColors.terracotta.withValues(alpha: 0.4),
-                                      width: 1.5,
-                                    ),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color(0x0C000000),
-                                        blurRadius: 6,
-                                        offset: Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.volunteer_activism_rounded,
-                                        color: AppColors.terracotta,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'Talk to Sathi',
-                                        style: TextStyle(
-                                          fontSize: isLandscape ? 14 : 16,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.terracotta,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              SizedBox(
-                                width: isLandscape ? 90 : 120,
-                                height: isLandscape ? 45 : 65,
-                                child: const CustomPaint(
-                                  painter: _HeaderSunHillsPainter(),
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: isLandscape ? 90 : 120,
+                            height: isLandscape ? 45 : 65,
+                            child: const CustomPaint(
+                              painter: _HeaderSunHillsPainter(),
+                            ),
                           ),
                         ],
                       ),
                     ),
 
-                    // 4 CARDS: 1-column in Portrait, 2-column in Landscape
+                    // 5 CARDS: Scrollable view
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(
+                          20,
+                          8,
+                          20,
+                          isLandscape ? 80 : 120,
+                        ),
                         child: isLandscape
                             ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
                                     child: Column(
                                       children: [
-                                        Expanded(
-                                          child: _buildPlayCard(compact: true),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Expanded(
-                                          child: _buildMyPeopleCard(data,
-                                              compact: true),
-                                        ),
+                                        _buildPlayCard(compact: true),
+                                        const SizedBox(height: 16),
+                                        _buildMyPeopleCard(data,
+                                            compact: true),
+                                        const SizedBox(height: 16),
+                                        _buildTodayCard(data,
+                                            compact: true),
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(width: 14),
+                                  const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
                                       children: [
-                                        Expanded(
-                                          child: _buildTodayCard(data,
-                                              compact: true),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Expanded(
-                                          child: _buildCallCard(data,
-                                              compact: true),
-                                        ),
+                                        _buildCallCard(data,
+                                            compact: true),
+                                        const SizedBox(height: 16),
+                                        _buildSathiCard(compact: true),
                                       ],
                                     ),
                                   ),
@@ -438,21 +380,28 @@ class _HomeScreenState extends State<HomeScreen> {
                               )
                             : Column(
                                 children: [
-                                  Expanded(child: _buildPlayCard()),
-                                  const SizedBox(height: 12),
-                                  Expanded(child: _buildMyPeopleCard(data)),
-                                  const SizedBox(height: 12),
-                                  Expanded(child: _buildTodayCard(data)),
-                                  const SizedBox(height: 12),
-                                  Expanded(child: _buildCallCard(data)),
+                                  _buildPlayCard(),
+                                  const SizedBox(height: 16),
+                                  _buildMyPeopleCard(data),
+                                  const SizedBox(height: 16),
+                                  _buildTodayCard(data),
+                                  const SizedBox(height: 16),
+                                  _buildCallCard(data),
+                                  const SizedBox(height: 16),
+                                  _buildSathiCard(),
                                 ],
                               ),
                       ),
                     ),
-
-                    // BOTTOM BAR: Floating center microphone button
-                    _buildBottomBar(compact: isLandscape),
                   ],
+                ),
+
+                // FLOATING CENTER MICROPHONE BUTTON
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildBottomBar(compact: isLandscape),
                 ),
                 VoiceInteractionOverlay(
                   state: _micState,
@@ -583,6 +532,29 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ─────────────────────────────────────────────
+  // CARD 5: Talk to Sathi (Warm Purple)
+  // ─────────────────────────────────────────────
+  Widget _buildSathiCard({bool compact = false}) {
+    return _buildHomeCard(
+      key: const Key('home_voicebot_button'),
+      onTap: _openVoiceBotSheet,
+      backgroundColor: AppColors.warmPurple,
+      compact: compact,
+      avatarBackgroundColor: Colors.white,
+      avatarChild: Icon(
+        Icons.support_agent_rounded,
+        size: compact ? 30 : 38,
+        color: AppColors.warmPurpleDark,
+      ),
+      title: 'Talk to Sathi',
+      subtitle: 'Your AI companion',
+      titleColor: const Color(0xFFFFFDF8),
+      subtitleColor: const Color(0xFFFFF8ED).withValues(alpha: 0.9),
+      chevronColor: Colors.white,
+    );
+  }
+
   Widget _buildHomeCard({
     Key? key,
     required VoidCallback onTap,
@@ -593,6 +565,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color titleColor,
     required Color subtitleColor,
     required Color chevronColor,
+    Color avatarBackgroundColor = const Color(0xFFF3E7D3),
     bool compact = false,
   }) {
     return InkWell(
@@ -600,28 +573,30 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(compact ? 20 : 24),
       child: Container(
+        height: compact ? 80.0 : 108.0,
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(compact ? 20 : 24),
         ),
         padding: EdgeInsets.symmetric(
-          horizontal: compact ? 14 : 18,
+          horizontal: compact ? 14 : 20,
           vertical: compact ? 8 : 12,
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Circle Avatar Badge
             Container(
               width: compact ? 50 : 64,
               height: compact ? 50 : 64,
-              decoration: const BoxDecoration(
-                color: Color(0xFFF3E7D3),
+              decoration: BoxDecoration(
+                color: avatarBackgroundColor,
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
               child: avatarChild,
             ),
-            SizedBox(width: compact ? 12 : 18),
+            SizedBox(width: compact ? 14 : 18),
             // Title & Subtitle
             Expanded(
               child: Column(
@@ -640,7 +615,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     subtitle,
                     style: TextStyle(
@@ -658,8 +633,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
             // Right Chevron
             Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: compact ? 20 : 24,
+              Icons.chevron_right_rounded,
+              size: compact ? 28 : 34,
               color: chevronColor,
             ),
           ],
@@ -673,34 +648,37 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────
   Widget _buildBottomBar({bool compact = false}) {
     final size = compact ? 52.0 : 66.0;
-    return Padding(
-      padding: EdgeInsets.only(
-        top: compact ? 4 : 8,
-        bottom: compact ? 6 : 14,
-      ),
-      child: Center(
-        child: GestureDetector(
-          key: const Key('home_mic_button'),
-          onTap: _onMicTapped,
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFDF8),
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primaryText, width: 2.2),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 6,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Icon(
-              Icons.mic_none_rounded,
-              size: compact ? 28 : 36,
-              color: AppColors.primaryText,
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.only(
+          top: compact ? 4 : 8,
+          bottom: compact ? 8 : 16,
+        ),
+        child: Center(
+          child: GestureDetector(
+            key: const Key('home_mic_button'),
+            onTap: _onMicTapped,
+            child: Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFDF8),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.primaryText, width: 2.2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x14000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.mic_none_rounded,
+                size: compact ? 28 : 36,
+                color: AppColors.primaryText,
+              ),
             ),
           ),
         ),
