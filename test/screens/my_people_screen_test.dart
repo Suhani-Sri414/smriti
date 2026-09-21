@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:smriti/core/app_services.dart';
 import 'package:smriti/core/db/database.dart';
 import 'package:smriti/core/files/file_paths.dart';
@@ -195,5 +196,69 @@ void main() {
     expect(memos.single.contextTag, 'p-0');
     expect(memos.single.durationMs, greaterThan(0));
     expect(memos.single.uploaded, isFalse);
+  });
+
+  testWidgets('renders fallback Icons.person when person has empty photo',
+      (tester) async {
+    await db.into(db.people).insert(
+          PeopleCompanion.insert(
+            id: 'p-no-photo',
+            name: 'NoPhoto Person',
+            relationship: 'Friend',
+            photoPath: '',
+            sortOrder: 0,
+          ),
+        );
+    final services = AppServices(database: db);
+    await tester.pumpWidget(createSubject(services: services));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.person), findsOneWidget);
+  });
+
+  testWidgets('renders Image.file when photo exists as a local file',
+      (tester) async {
+    final photoFile = File(p.join(tempDir.path, 'local_photo.png'))
+      ..writeAsBytesSync([
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+        0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
+        0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 96, 0, 0, 0, 2,
+        0, 1, 226, 33, 188, 51, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66,
+        96, 130,
+      ]);
+
+    await db.into(db.people).insert(
+          PeopleCompanion.insert(
+            id: 'p-local',
+            name: 'Local Person',
+            relationship: 'Sister',
+            photoPath: photoFile.path,
+            sortOrder: 0,
+          ),
+        );
+    final services = AppServices(database: db);
+    await tester.pumpWidget(createSubject(services: services));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('renders fallback Icons.person when photo file does not exist on disk',
+      (tester) async {
+    await db.into(db.people).insert(
+          PeopleCompanion.insert(
+            id: 'p-missing-file',
+            name: 'Missing File Person',
+            relationship: 'Brother',
+            photoPath: '/non/existent/path/brother.jpg',
+            sortOrder: 0,
+          ),
+        );
+    final services = AppServices(database: db);
+    await tester.pumpWidget(createSubject(services: services));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.person), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
   });
 }

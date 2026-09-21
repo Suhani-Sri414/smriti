@@ -42,10 +42,30 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
   late final VoiceRecorder _recorder =
       widget.voiceRecorder ?? StubVoiceRecorder();
 
-  late final Future<List<PeopleData>> _peopleFuture = _loadPeople();
+  late Future<List<PeopleData>> _peopleFuture = _loadPeople();
 
-  Future<List<PeopleData>> _loadPeople() =>
-      widget.services.contentRepo.getPeople();
+  Future<List<PeopleData>> _loadPeople() async {
+    final people = await widget.services.contentRepo.getPeople();
+    // ignore: avoid_print
+    print("DEBUG UI - Loaded ${people.length} people from SQLite Drift:");
+    for (final p in people) {
+      // ignore: avoid_print
+      print("DEBUG UI - Person id=${p.id}, name=${p.name}, photoPath=${p.photoPath}");
+    }
+    return people;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.services.syncEngine.run(trigger: SyncTrigger.manual).then((_) {
+      if (mounted) {
+        setState(() {
+          _peopleFuture = _loadPeople();
+        });
+      }
+    }).ignore();
+  }
 
   @override
   void dispose() {
@@ -267,7 +287,6 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
     bool isCompact = false,
   }) {
     final avatarColor = _getAvatarColor(index);
-    final photo = existingFile(person.photoPath);
     final diskSize = isCompact ? 64.0 : 88.0;
 
     return InkWell(
@@ -285,20 +304,12 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
               color: Color(0xFFE4DAC3),
               shape: BoxShape.circle,
             ),
-            clipBehavior: Clip.antiAlias,
-            child: photo != null
-                ? Image.file(
-                    photo,
-                    fit: BoxFit.cover,
-                    width: diskSize,
-                    height: diskSize,
-                  )
-                : (isCompact
-                    ? Transform.scale(
-                        scale: diskSize / 88.0,
-                        child: _buildAvatarSilhouette(index, avatarColor),
-                      )
-                    : _buildAvatarSilhouette(index, avatarColor)),
+            child: _PersonAvatar(
+              photoPath: person.photoPath,
+              avatarColor: avatarColor,
+              size: diskSize,
+              services: widget.services,
+            ),
           ),
           SizedBox(height: isCompact ? 6 : 10),
 
@@ -317,86 +328,6 @@ class _MyPeopleScreenState extends State<MyPeopleScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildAvatarSilhouette(int index, Color color) {
-    // Indices with hair/cap/headband accents matching the 9-member design
-    final hasHairTop = index == 1 || index == 2 || index == 6;
-    final hasCap = index == 4;
-    final hasHeadband = index == 8;
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Head
-        Positioned(
-          top: 20,
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-
-        // Optional hair arc / cap accent
-        if (hasHairTop)
-          Positioned(
-            top: 17,
-            child: Container(
-              width: 22,
-              height: 7,
-              decoration: BoxDecoration(
-                color: const Color(0xFF231C18),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ),
-
-        if (hasCap)
-          Positioned(
-            top: 18,
-            child: Container(
-              width: 28,
-              height: 8,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2E2724),
-                borderRadius: BorderRadius.circular(5),
-              ),
-            ),
-          ),
-
-        if (hasHeadband)
-          Positioned(
-            top: 32,
-            child: Container(
-              width: 30,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF231C18),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-
-        // Shoulders / Torso
-        Positioned(
-          bottom: -4,
-          child: Container(
-            width: 58,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(29),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -515,8 +446,6 @@ class _PersonDetailDialogState extends State<_PersonDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final photo = existingFile(widget.person.photoPath);
-
     return Dialog(
       backgroundColor: const Color(0xFFFFFDF8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -535,22 +464,12 @@ class _PersonDetailDialogState extends State<_PersonDetailDialog> {
                 color: Color(0xFFE6DEC8),
                 shape: BoxShape.circle,
               ),
-              child: photo != null
-                  ? ClipOval(
-                      child: Image.file(
-                        photo,
-                        fit: BoxFit.cover,
-                        width: 104,
-                        height: 104,
-                      ),
-                    )
-                  : Center(
-                      child: Icon(
-                        Icons.person,
-                        size: 72,
-                        color: widget.avatarColor,
-                      ),
-                    ),
+              child: _PersonAvatar(
+                photoPath: widget.person.photoPath,
+                avatarColor: widget.avatarColor,
+                size: 104,
+                services: widget.services,
+              ),
             ),
             const SizedBox(height: 12),
 
@@ -650,7 +569,70 @@ class _PersonDetailDialogState extends State<_PersonDetailDialog> {
         ),
       ),
     ),
+  );
+  }
+}
+
+/// Renders a person's avatar using local-first storage.
+///
+/// If a local file exists on disk at [photoPath], renders it directly using [Image.file].
+/// Falls back to a high-contrast [CircleAvatar] with [Icons.person] if [photoPath] is
+/// null, empty, or does not exist on disk.
+class _PersonAvatar extends StatelessWidget {
+  const _PersonAvatar({
+    required this.photoPath,
+    required this.avatarColor,
+    required this.size,
+    this.services,
+  });
+
+  final String? photoPath;
+  final Color avatarColor;
+  final double size;
+  final AppServices? services;
+
+  @override
+  Widget build(BuildContext context) {
+    final localFile = _resolveLocalFile(photoPath);
+    if (localFile != null) {
+      return ClipOval(
+        child: Image.file(
+          localFile,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildFallback(),
+        ),
+      );
+    }
+
+    return _buildFallback();
+  }
+
+  Widget _buildFallback() {
+    return CircleAvatar(
+      radius: size / 2,
+      backgroundColor: avatarColor,
+      child: Icon(
+        Icons.person,
+        size: size * 0.58,
+        color: const Color(0xFFFFFDF8),
+      ),
     );
+  }
+
+  File? _resolveLocalFile(String? path) {
+    if (path == null || path.trim().isEmpty) return null;
+    final trimmed = path.trim();
+    final direct = File(trimmed);
+    if (direct.existsSync()) return direct;
+
+    if (FilePaths.documentsDirectoryOverride != null) {
+      final overrideFile =
+          File(p.join(FilePaths.documentsDirectoryOverride!, trimmed));
+      if (overrideFile.existsSync()) return overrideFile;
+    }
+    return null;
   }
 }
 
@@ -659,3 +641,4 @@ File? existingFile(String? path) {
   final file = File(path);
   return file.existsSync() ? file : null;
 }
+

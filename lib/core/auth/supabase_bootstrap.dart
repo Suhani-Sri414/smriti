@@ -39,3 +39,13 @@ bool hasSupabaseSession() {
     return false;
   }
 }
+
+/// Retrieves the active Supabase access token (JWT), or falls back to anon key.
+String? getSupabaseAccessToken() {
+  try {
+    return Supabase.instance.client.auth.currentSession?.accessToken ??
+        supabaseAnonKey;
+  } catch (_) {
+    return supabaseAnonKey;
+  }
+}

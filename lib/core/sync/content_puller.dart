@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart' show Value;
 // TEMPORARY DIAGNOSTIC import, for the [pull] logging below. Remove with it.
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../db/database.dart';
@@ -193,16 +197,33 @@ class ContentPuller {
       debugPrint('[pull]   media ref: $ref');
     }
 
-    // 3. Media first: download to tmp, verify, then move into place. Throws
-    //    before anything is moved if a single file fails.
-    //
-    //    NOTE: this sits between the RPC and the Drift write, so a missing
-    //    storage object aborts the pull here — RPC succeeded, rows never
-    //    written, version never bumped.
-    debugPrint('[pull] staging ${parsed.media.length} media file(s) …');
-    final staged = await mediaDownloader.stage(parsed.media);
-    debugPrint('[pull] staged ${staged.length} file(s) OK, committing …');
-    await mediaDownloader.commit(staged);
+    // 2b. Download people photos directly with graceful error handling
+    // and stage them for atomic commit.
+    final preparedPeople = await _downloadAndPreparePeople(
+      ContentPayloadParser._list(payload, 'people'),
+    );
+
+    // 3. Media first: download to tmp, verify, then move into place.
+    // Person photos are already downloaded and verified in step 2b, so filter them out of mediaRefs to stage.
+    final mediaToStage = parsed.media
+        .where((m) => m.kind != MediaKind.personPhoto)
+        .toList();
+    debugPrint('[pull] staging ${mediaToStage.length} media file(s) …');
+    final List<StagedMedia> staged;
+    try {
+      staged = await mediaDownloader.stage(mediaToStage);
+    } catch (e) {
+      // Discard staged people photos if staging remaining media fails
+      for (final s in preparedPeople.stagedPhotos) {
+        final f = File(s.tempPath);
+        if (await f.exists()) await f.delete();
+      }
+      rethrow;
+    }
+
+    final allStaged = [...preparedPeople.stagedPhotos, ...staged];
+    debugPrint('[pull] staged ${allStaged.length} file(s) OK, committing …');
+    await mediaDownloader.commit(allStaged);
     debugPrint('[pull] media committed to disk');
 
     // 4. Atomic swap; contentVersion is bumped inside the same transaction, so
@@ -211,12 +232,12 @@ class ContentPuller {
     //    between the two calls.
     final appliedVersion = parsed.version ?? remoteVersion;
     debugPrint('[pull] Drift transaction START '
-        '(writing ${parsed.people.length} people, '
+        '(writing ${preparedPeople.companions.length} people, '
         '${parsed.medications.length} medications, '
         '${parsed.routineItems.length} routine items, '
         'version -> $appliedVersion)');
     await contentRepo.replaceContent(
-      people: parsed.people,
+      people: preparedPeople.companions,
       medications: parsed.medications,
       routineItems: parsed.routineItems,
       contentVersion: appliedVersion,
@@ -231,6 +252,139 @@ class ContentPuller {
     debugPrint('[pull] --- pull() complete: updated to $appliedVersion ---');
 
     return PullResult.updated(appliedVersion);
+  }
+
+  /// Downloads people photos directly from Supabase Storage and records the
+  /// absolute local file path into Drift SQLite.
+  ///
+  /// Staged to tmp/ first so that if overall media sync fails, partial files
+  /// are discarded cleanly and not left in final directories.
+  ///
+  /// If a photo download fails, logs the error and gracefully sets the photoPath to
+  /// empty string (so SQLite has no invalid path, and UI renders the fallback icon).
+  Future<({List<PeopleCompanion> companions, List<StagedMedia> stagedPhotos})>
+      _downloadAndPreparePeople(
+    List<Map<String, dynamic>> peopleRows,
+  ) async {
+    final companions = <PeopleCompanion>[];
+    final stagedPhotos = <StagedMedia>[];
+
+    String photosDir;
+    try {
+      photosDir =
+          await mediaDownloader.storage.directoryFor(MediaKind.personPhoto);
+    } catch (_) {
+      final docDir = await getApplicationDocumentsDirectory();
+      photosDir = p.join(docDir.path, 'people', 'photos');
+    }
+    final tempRoot = await mediaDownloader.storage.tempDirectory();
+
+    var sortOrder = 0;
+    for (final raw in peopleRows) {
+      // ignore: avoid_print
+      print("DEBUG SYNC - Received Person Payload: $raw");
+
+      final id = ContentPayloadParser._string(raw, 'id');
+      if (id == null) continue;
+
+      final rawPhotoPath = ContentPayloadParser._string(raw, 'photo_path') ??
+          ContentPayloadParser._string(raw, 'image_path') ??
+          ContentPayloadParser._string(raw, 'image_url') ??
+          ContentPayloadParser._string(raw, 'photo_url');
+
+      String? absoluteLocalPath;
+      if (rawPhotoPath != null && rawPhotoPath.trim().isNotEmpty) {
+        final cleanPath = _cleanStoragePath(rawPhotoPath, patientMediaBucket);
+        try {
+          final bytes = await _downloadPhotoBytes(cleanPath);
+          if (bytes.isNotEmpty) {
+            final tempPath = p.join(tempRoot, 'personPhoto_$id.jpg');
+            final tempFile = File(tempPath);
+            await tempFile.writeAsBytes(bytes, flush: true);
+            if (await tempFile.exists() &&
+                await tempFile.length() == bytes.length) {
+              absoluteLocalPath = p.join(photosDir, '$id.jpg');
+              stagedPhotos.add(
+                StagedMedia(
+                  ref: MediaRef(
+                    bucket: patientMediaBucket,
+                    objectPath: cleanPath,
+                    kind: MediaKind.personPhoto,
+                    ownerId: id,
+                  ),
+                  tempPath: tempPath,
+                ),
+              );
+              debugPrint('[pull] Downloaded photo for person $id to $tempPath');
+            }
+          }
+        } catch (e) {
+          debugPrint(
+              '[pull] Failed to download photo for person $id ($rawPhotoPath): $e');
+          final existing = File(p.join(photosDir, '$id.jpg'));
+          if (existing.existsSync()) {
+            absoluteLocalPath = existing.path;
+          } else {
+            absoluteLocalPath = null;
+          }
+        }
+      }
+
+      final voiceObject = ContentPayloadParser._string(raw, 'voice_path');
+
+      companions.add(
+        PeopleCompanion.insert(
+          id: id,
+          name: ContentPayloadParser._string(raw, 'name') ?? '',
+          relationship:
+              ContentPayloadParser._string(raw, 'relationship') ?? '',
+          photoPath: absoluteLocalPath ?? '',
+          voicePath: Value(
+            voiceObject == null
+                ? null
+                : ContentPayloadParser._localPath(MediaKind.personVoice, id),
+          ),
+          memoryPrompt:
+              Value(ContentPayloadParser._string(raw, 'memory_prompt')),
+          isDeceased:
+              Value(ContentPayloadParser._bool(raw, 'is_deceased') ?? false),
+          sortOrder: ContentPayloadParser._int(raw, 'sort_order') ?? sortOrder,
+        ),
+      );
+      sortOrder++;
+    }
+
+    return (companions: companions, stagedPhotos: stagedPhotos);
+  }
+
+  Future<Uint8List> _downloadPhotoBytes(String cleanPath) async {
+    // If a custom MediaFetcher is supplied (e.g. in test suites):
+    if (mediaDownloader.fetcher is! SupabaseMediaFetcher) {
+      final list = await mediaDownloader.fetcher.download(
+        patientMediaBucket,
+        cleanPath,
+      );
+      return Uint8List.fromList(list);
+    }
+
+    // In production with Supabase client:
+    final Uint8List bytes = await Supabase.instance.client.storage
+        .from(patientMediaBucket)
+        .download(cleanPath);
+    return bytes;
+  }
+
+  static String _cleanStoragePath(String raw, String bucket) {
+    var clean = raw.trim();
+    if (clean.contains('/$bucket/')) {
+      clean = clean.substring(clean.indexOf('/$bucket/') + bucket.length + 2);
+    } else if (clean.startsWith('$bucket/')) {
+      clean = clean.substring(bucket.length + 1);
+    }
+    while (clean.startsWith('/')) {
+      clean = clean.substring(1);
+    }
+    return clean;
   }
 
   /// TEMPORARY DIAGNOSTIC — what is actually in Drift right now.
@@ -280,27 +434,32 @@ class ContentPayloadParser {
     final media = <MediaRef>[];
 
     var sortOrder = 0;
-    for (final row in _list(payload, 'people')) {
-      final id = _string(row, 'id');
+    for (final jsonRow in _list(payload, 'people')) {
+      // ignore: avoid_print
+      print("DEBUG SYNC - Received Person Payload: $jsonRow");
+      final id = _string(jsonRow, 'id');
       if (id == null) continue;
 
-      final photoObject = _string(row, 'photo_path');
-      final voiceObject = _string(row, 'voice_path');
+      final photoObject = _string(jsonRow, 'photo_path') ??
+          _string(jsonRow, 'image_path') ??
+          _string(jsonRow, 'image_url') ??
+          _string(jsonRow, 'photo_url');
+      final voiceObject = _string(jsonRow, 'voice_path');
 
-      // Local paths are derived, never taken from the payload: §6 fixes the
-      // layout as people/photos/{id}.jpg and people/voice/{id}.m4a.
+      // Preserve the remote storage path / URL if provided, otherwise derive
+      // the standard local slot per APP-BUILD-SPEC.md §6.
       people.add(
         PeopleCompanion.insert(
           id: id,
-          name: _string(row, 'name') ?? '',
-          relationship: _string(row, 'relationship') ?? '',
-          photoPath: _localPath(MediaKind.personPhoto, id),
+          name: _string(jsonRow, 'name') ?? '',
+          relationship: _string(jsonRow, 'relationship') ?? '',
+          photoPath: photoObject ?? _localPath(MediaKind.personPhoto, id),
           voicePath: Value(
             voiceObject == null ? null : _localPath(MediaKind.personVoice, id),
           ),
-          memoryPrompt: Value(_string(row, 'memory_prompt')),
-          isDeceased: Value(_bool(row, 'is_deceased') ?? false),
-          sortOrder: _int(row, 'sort_order') ?? sortOrder,
+          memoryPrompt: Value(_string(jsonRow, 'memory_prompt')),
+          isDeceased: Value(_bool(jsonRow, 'is_deceased') ?? false),
+          sortOrder: _int(jsonRow, 'sort_order') ?? sortOrder,
         ),
       );
       sortOrder++;

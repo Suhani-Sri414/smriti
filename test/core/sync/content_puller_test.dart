@@ -162,7 +162,8 @@ void main() {
     );
   }
 
-  File localFile(String relative) => File(p.join(root.path, relative));
+  File localFile(String relative) =>
+      File(p.normalize(p.join(root.path, relative)));
 
   test('pulls media, swaps rows, bumps version, then reschedules alarms',
       () async {
@@ -179,8 +180,8 @@ void main() {
     // Every referenced object was fetched.
     expect(fetcher.requested, [
       'patient-media/patients/p1/people/per1.jpg',
-      'patient-media/patients/p1/people/per1.m4a',
       'patient-media/patients/p1/people/per2.jpg',
+      'patient-media/patients/p1/people/per1.m4a',
       'patient-media/patients/p1/meds/med1.jpg',
       'patient-media/patients/p1/meds/med1.m4a',
     ]);
@@ -202,7 +203,7 @@ void main() {
     expect(people.map((x) => x.id), ['per2', 'per1']);
     final anjali = await contentRepo.getPerson('per1');
     expect(anjali!.name, 'Anjali');
-    expect(anjali.photoPath, 'people/photos/per1.jpg');
+    expect(anjali.photoPath, localFile('people/photos/per1.jpg').path);
     expect(anjali.voicePath, 'people/voice/per1.m4a');
     expect(anjali.memoryPrompt, 'She visits on Sundays.');
     expect((await contentRepo.getPerson('per2'))!.voicePath, isNull);
@@ -373,6 +374,25 @@ void main() {
     expect(await localFile('people/photos/per1.jpg').exists(), isFalse);
   });
 
+  test(
+      'a failed person photo download saves person with empty photoPath and does not crash sync',
+      () async {
+    final fetcher =
+        FakeMediaFetcher(failOn: 'patients/p1/people/per1.jpg');
+    final puller = newPuller(
+      gateway: FakeContentGateway(remoteVersion: '7', payload: contentPayload()),
+      fetcher: fetcher,
+    );
+
+    final result = await puller.pull();
+    expect(result.didUpdate, isTrue);
+
+    final anjali = await contentRepo.getPerson('per1');
+    expect(anjali, isNotNull);
+    expect(anjali!.name, 'Anjali');
+    expect(anjali.photoPath, isEmpty);
+  });
+
   test('an unpaired device pulls nothing', () async {
     await db.appConfigsDao.deleteValue('patientId');
     final gateway = FakeContentGateway(remoteVersion: '7');
@@ -426,8 +446,7 @@ void main() {
       expect(person.relationship.value, 'daughter');
       expect(person.isDeceased.value, isFalse);
       expect(person.sortOrder.value, 0);
-      expect(person.photoPath.value,
-          'people/photos/1cda8709-d82e-4725-9e4f-97198052d57f.jpg');
+      expect(person.photoPath.value, 'test/placeholder.jpg');
       // JSON nulls stay null rather than becoming empty strings.
       expect(person.voicePath.value, isNull);
       expect(person.memoryPrompt.value, isNull);

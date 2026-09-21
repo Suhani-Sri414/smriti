@@ -115,6 +115,9 @@ class MediaDownloader {
   final MediaFetcher _fetcher;
   final MediaStorage _storage;
 
+  MediaFetcher get fetcher => _fetcher;
+  MediaStorage get storage => _storage;
+
   /// Fetches everything into tmp/ and verifies it is complete.
   ///
   /// Throws [MediaDownloadException] if any file fails, after cleaning up the
