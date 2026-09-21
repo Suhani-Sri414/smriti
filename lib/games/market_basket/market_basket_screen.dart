@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../app_colors.dart';
 import '../../core/app_services.dart';
 import '../../screens/session_end_screen.dart';
+import '../../ui/widgets/rest_card_dialog.dart';
 import '../cognitive_game.dart';
 import '../session_runner.dart';
 import 'market_basket_game.dart';
@@ -35,6 +36,7 @@ class _MarketBasketScreenState extends State<MarketBasketScreen> {
   late final SessionRunner _runner = SessionRunner(
     eventRepo: widget.services.eventRepo,
     abilityRepo: widget.services.abilityRepo,
+    progressionService: widget.services.progressionService,
     content: widget.content,
   );
 
@@ -170,7 +172,20 @@ class _MarketBasketScreenState extends State<MarketBasketScreen> {
     setState(() => _trialsDone++);
 
     _advanceTimer?.cancel();
-    _advanceTimer = Timer(Duration(milliseconds: isCorrect ? 1400 : 1600), () {
+    _advanceTimer = Timer(Duration(milliseconds: isCorrect ? 1400 : 1600), () async {
+      if (!mounted) return;
+      final restState = await widget.services.progressionRepo.getRestState();
+      if (!mounted) return;
+      if (restState.shouldRest()) {
+        final canContinue = await maybeShowRestCardDialog(
+          context,
+          progressionService: widget.services.progressionService,
+        );
+        if (!canContinue && mounted) {
+          Navigator.of(context).pop();
+          return;
+        }
+      }
       if (mounted) _nextItem();
     });
   }

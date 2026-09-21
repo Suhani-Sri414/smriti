@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
@@ -16,6 +17,7 @@ import 'my_people_screen.dart';
 import 'today_screen.dart';
 import 'voice_interaction_overlay.dart';
 import 'voicebot/voicebot_sheet.dart';
+import '../ui/debug/progression_debug_screen.dart';
 
 /// Screen 01: The Elder Home Screen.
 ///
@@ -128,6 +130,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openDebugSheet() => DebugSheet.show(context, widget.services);
+
+  Future<void> _openProgressionDebug() async {
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProgressionDebugScreen(services: widget.services),
+      ),
+    );
+  }
 
   Future<void> _openCaregiverDiagnostics() async {
     final nav = Navigator.of(context);
@@ -327,11 +338,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          SizedBox(
-                            width: isLandscape ? 90 : 120,
-                            height: isLandscape ? 45 : 65,
-                            child: const CustomPaint(
-                              painter: _HeaderSunHillsPainter(),
+                          GestureDetector(
+                            key: const Key('home_header_illustration_trigger'),
+                            behavior: HitTestBehavior.opaque,
+                            onLongPress: kDebugMode ? _openProgressionDebug : null,
+                            child: SizedBox(
+                              width: isLandscape ? 90 : 120,
+                              height: isLandscape ? 45 : 65,
+                              child: const CustomPaint(
+                                painter: _HeaderSunHillsPainter(),
+                              ),
                             ),
                           ),
                         ],
@@ -651,36 +667,61 @@ class _HomeScreenState extends State<HomeScreen> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: EdgeInsets.only(
-          top: compact ? 4 : 8,
-          bottom: compact ? 8 : 16,
+        padding: EdgeInsets.fromLTRB(
+          24,
+          compact ? 4 : 8,
+          24,
+          compact ? 8 : 16,
         ),
-        child: Center(
-          child: GestureDetector(
-            key: const Key('home_mic_button'),
-            onTap: _onMicTapped,
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFDF8),
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.primaryText, width: 2.2),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x14000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Center(
+              child: GestureDetector(
+                key: const Key('home_mic_button'),
+                onTap: _onMicTapped,
+                child: Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFDF8),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.primaryText, width: 2.2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Icon(
-                Icons.mic_none_rounded,
-                size: compact ? 28 : 36,
-                color: AppColors.primaryText,
+                  child: Icon(
+                    Icons.mic_none_rounded,
+                    size: compact ? 28 : 36,
+                    color: AppColors.primaryText,
+                  ),
+                ),
               ),
             ),
-          ),
+            Positioned(
+              left: 0,
+              bottom: 4,
+              child: GestureDetector(
+                key: const Key('home_progression_debug_trigger'),
+                behavior: HitTestBehavior.opaque,
+                onLongPress: kDebugMode ? _openProgressionDebug : null,
+                child: Text(
+                  'v1.0.0',
+                  key: const Key('app_version_number'),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.secondaryText.withValues(alpha: 0.35),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

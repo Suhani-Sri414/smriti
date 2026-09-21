@@ -7,6 +7,10 @@ import 'package:uuid/uuid.dart';
 
 import '../core/ability/estimator.dart';
 import '../core/db/database.dart';
+import '../core/progression/difficulty_source.dart';
+import '../core/progression/play_policy.dart';
+import '../core/progression/progression_service.dart';
+import '../core/progression/trial_scoring.dart';
 import '../core/repo/ability_repo.dart';
 import '../core/repo/event_repo.dart';
 import '../core/voice/phrase_player.dart';
@@ -37,6 +41,8 @@ class SessionRunner {
     required this.eventRepo,
     required this.abilityRepo,
     required this.content,
+    this.progressionService,
+    this.difficultySource,
     this.phrasePlayer,
     Uuid? uuid,
     DateTime Function()? now,
@@ -48,6 +54,8 @@ class SessionRunner {
   final EventRepo eventRepo;
   final AbilityRepo abilityRepo;
   final GameContent content;
+  final ProgressionService? progressionService;
+  final DifficultySource? difficultySource;
   final PhrasePlayer? phrasePlayer;
   final Duration sessionCap;
   final int maxHintLevel;
@@ -57,6 +65,7 @@ class SessionRunner {
 
   final _feedback = StreamController<TrialFeedback>.broadcast();
   final List<StreamSubscription<TrialResult>> _subscriptions = [];
+  final Map<String, DifficultySource> _difficultySources = {};
 
   /// Cues for the UI and voice layers. Never carries a negative tone.
   Stream<TrialFeedback> get feedback => _feedback.stream;
@@ -112,6 +121,12 @@ class SessionRunner {
         phrasePlayer?.playPhrase(PhraseKey.sessionStart) ?? Future.value());
 
     for (final game in games) {
+      if (difficultySource != null) {
+        _difficultySources[game.id] = difficultySource!;
+      } else if (progressionService != null) {
+        _difficultySources[game.id] =
+            await progressionService!.createDifficultySource(game.id);
+      }
       _subscriptions.add(
         game.trials.listen((result) => _recordTrial(game, result)),
       );
@@ -120,17 +135,48 @@ class SessionRunner {
     return id;
   }
 
-  /// Picks the next item's difficulty from the current ability estimate and
-  /// asks [game] to generate it. Returns null once the cap is reached.
+  /// Returns the DifficultySource attached to [gameId], if any.
+  DifficultySource? getDifficultySource(String gameId) =>
+      _difficultySources[gameId];
+
+  /// Returns the current effective level L (>= 1.0) for [gameId].
+  double getEffectiveLevel(String gameId) =>
+      _difficultySources[gameId]?.currentLevel(gameId) ?? 5.0;
+
+  /// Checks current fatigue status against [ProgressionService].
+  Future<RestCardEvaluation?> checkFatigue({DateTime? currentTime}) async {
+    if (progressionService == null) return null;
+    return progressionService!.checkRestStatus(currentTime: currentTime ?? _now());
+  }
+
+  /// Picks the next item's difficulty from the active DifficultySource (or ability estimate)
+  /// and asks [game] to generate it. Returns null once the cap is reached.
   Future<GameItem?> nextItem(CognitiveGame game) async {
     if (!canContinue) return null;
 
-    final record = await abilityRepo.getOrSeed(game.primaryDomain);
-    _thetaBefore = record.theta;
+    DifficultySource? source = _difficultySources[game.id];
+    if (source == null && difficultySource != null) {
+      source = difficultySource;
+      _difficultySources[game.id] = source!;
+    } else if (source == null && progressionService != null) {
+      source = await progressionService!.createDifficultySource(game.id);
+      _difficultySources[game.id] = source;
+    }
+
+    final double difficulty;
+    if (source != null) {
+      difficulty = source.currentDifficulty(game.id);
+      _thetaBefore = source.currentLevel(game.id);
+    } else {
+      final record = await abilityRepo.getOrSeed(game.primaryDomain);
+      _thetaBefore = record.theta;
+      difficulty = AbilityEstimator.nextDifficulty(record.theta);
+    }
+
     _hintLevel = 0;
 
     final item = game.generateItem(
-      AbilityEstimator.nextDifficulty(record.theta),
+      difficulty,
       content,
     );
 
@@ -170,6 +216,25 @@ class SessionRunner {
     final ts = _now();
     final responseTimeMs = result.initiationMs + result.movementMs;
 
+    // In-session Staircase adjustment
+    final source = _difficultySources[game.id];
+    if (source != null) {
+      source.recordTrialResult(
+        gameId: game.id,
+        correct: result.correct,
+        hintLevel: _hintLevel,
+      );
+    }
+
+    // Continuous partial-credit scoring S in [0.0, 1.0]
+    final continuousScore = TrialScoring.computeTrialScore(
+      gameId: game.id,
+      correct: result.correct,
+      metrics: result.metrics,
+    );
+    final metricsMap = Map<String, Object?>.from(result.metrics);
+    metricsMap['score'] = continuousScore;
+
     await eventRepo.insertTrial(
       TrialEventsCompanion.insert(
         id: _uuid.v4(),
@@ -188,7 +253,7 @@ class SessionRunner {
         trialIndex: _trialIndex,
         trialContext: Value(jsonEncode(item.context)),
         hintLevel: Value(_hintLevel),
-        metrics: Value(jsonEncode(result.metrics)),
+        metrics: Value(jsonEncode(metricsMap)),
         ts: ts.millisecondsSinceEpoch,
         hourOfDay: ts.hour,
         tzOffsetMin: ts.timeZoneOffset.inMinutes,
@@ -225,13 +290,13 @@ class SessionRunner {
   }
 
   /// Closes the session. [completed] is false when the elder walked away.
-  Future<void> end({bool? completed}) async {
+  Future<void> end({bool completed = true}) async {
     final id = _sessionId;
     if (id == null || _ended) return;
 
     _ended = true;
     final endedAt = _now();
-    final ranFullLength = completed ?? isCapReached;
+    final ranFullLength = completed;
 
     unawaited(phrasePlayer?.playPhrase(PhraseKey.sessionEnd) ?? Future.value());
 
@@ -241,6 +306,11 @@ class SessionRunner {
       completed: ranFullLength,
       abandonedAtMs: ranFullLength ? null : elapsed.inMilliseconds,
     );
+
+    for (final source in _difficultySources.values) {
+      source.resetSession();
+    }
+    _difficultySources.clear();
 
     for (final subscription in _subscriptions) {
       await subscription.cancel();

@@ -66,12 +66,12 @@ class EventPusher {
       );
       if (rows.isEmpty) break;
 
-      // Sessions allow device updates (`s_update` RLS policy) so finalized
-      // sessions update any row previously ingested while in-progress.
+      // Bare upsert with ignoreDuplicates: true prevents RLS update/read violations
+      // on the insert-only device identity.
       await gateway.upsert(
         RemoteRows.sessionsTable,
         [for (final row in rows) RemoteRows.session(row, patientId)],
-        ignoreDuplicates: false,
+        ignoreDuplicates: true,
       );
       await eventRepo.markSessionsSynced([for (final row in rows) row.id]);
       pushed += rows.length;
@@ -89,6 +89,7 @@ class EventPusher {
       await gateway.upsert(
         RemoteRows.eventsTable,
         [for (final row in rows) RemoteRows.trial(row, patientId)],
+        ignoreDuplicates: true,
       );
       await eventRepo.markTrialsSynced([for (final row in rows) row.id]);
       pushed += rows.length;
@@ -110,6 +111,7 @@ class EventPusher {
       await gateway.upsert(
         RemoteRows.reminderEventsTable,
         [for (final row in rows) RemoteRows.reminderEvent(row, patientId)],
+        ignoreDuplicates: true,
       );
       await eventRepo.markReminderEventsSynced([for (final row in rows) row.id]);
       pushed += rows.length;

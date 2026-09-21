@@ -20,6 +20,7 @@ class FakeSyncGateway implements SyncGateway {
 
   /// table -> rows written.
   final Map<String, List<Map<String, dynamic>>> upserts = {};
+  final Map<String, bool> upsertIgnoreDuplicates = {};
   final List<String> uploads = [];
   final List<Map<String, dynamic>> rpcCalls = [];
 
@@ -35,6 +36,7 @@ class FakeSyncGateway implements SyncGateway {
     bool ignoreDuplicates = true,
   }) async {
     calls.add('upsert:$table');
+    upsertIgnoreDuplicates[table] = ignoreDuplicates;
     if (table == failUpsertOn) throw Exception('upsert failed for $table');
     upserts.putIfAbsent(table, () => []).addAll(rows);
   }

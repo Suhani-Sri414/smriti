@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'auth/pairing_service.dart';
-import 'auth/supabase_bootstrap.dart';
+import 'auth/supabase_bootstrap.dart' as auth_boot;
 import 'db/app_database.dart';
 import 'db/database.dart';
 import 'files/file_paths.dart';
@@ -17,8 +17,11 @@ import 'sync/event_pusher.dart';
 import 'sync/heartbeat.dart';
 import 'sync/media_downloader.dart';
 import 'sync/memo_uploader.dart';
+import 'sync/storage_urls.dart';
 import 'sync/sync_engine.dart';
 import 'kiosk/kiosk_service.dart';
+import 'progression/progression_repo.dart';
+import 'progression/progression_service.dart';
 import 'reminders/notifications.dart';
 import 'voice/phrase_player.dart';
 import 'voice/screen_reader_service.dart';
@@ -49,6 +52,8 @@ class AppServices {
     eventRepo = EventRepo(db);
     abilityRepo = AbilityRepo(db);
     memoRepo = MemoRepo(db);
+    progressionRepo = ProgressionRepo(db);
+    progressionService = ProgressionService(repo: progressionRepo);
 
     this.connectivityService = connectivityService ?? ConnectivityService();
 
@@ -87,7 +92,7 @@ class AppServices {
       heartbeat: Heartbeat(eventRepo: eventRepo, configs: db.appConfigsDao),
       configs: db.appConfigsDao,
       hasConnection: () => this.connectivityService.checkConnection(),
-      isAuthenticated: () async => hasSupabaseSession(),
+      isAuthenticated: () async => auth_boot.hasSupabaseSession(),
     );
 
     // Auto-sync whenever network connection is restored
@@ -118,6 +123,8 @@ class AppServices {
   late final EventRepo eventRepo;
   late final AbilityRepo abilityRepo;
   late final MemoRepo memoRepo;
+  late final ProgressionRepo progressionRepo;
+  late final ProgressionService progressionService;
   late final AlarmScheduler alarmScheduler;
   late final PairingService pairingService;
   late final ContentPuller contentPuller;
@@ -169,6 +176,12 @@ class AppServices {
   /// directory, e.g. `medications/photos/{id}.jpg`.
   Future<String> resolveMediaPath(String relativePath) =>
       FilePaths.absolute(relativePath);
+
+  /// Resolves a family member or caregiver photo path to a fully qualified authenticated URL.
+  static String resolvePhotoUrl(String? path) => StorageUrls.resolvePhotoUrl(path);
+
+  /// Retrieves the active Supabase access token (JWT), or falls back to anon key.
+  static String? getSupabaseAccessToken() => auth_boot.getSupabaseAccessToken();
 
   /// Releases active listeners and background timers.
   void dispose() {

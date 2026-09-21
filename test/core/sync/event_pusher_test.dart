@@ -24,12 +24,14 @@ void main() {
     String id = 'ses-1',
     int startedAt = 1757199000000,
     int? endedAt = 1757199100000,
+    bool completed = true,
   }) =>
       eventRepo.insertSession(
         SessionsCompanion.insert(
           id: id,
           startedAt: startedAt,
           endedAt: Value(endedAt),
+          completed: Value(completed),
           gameIds: 'market_basket',
         ),
       );
@@ -92,6 +94,11 @@ void main() {
       'upsert:reminder_events',
     ]);
 
+    // RLS insert-only policy requires bare upsert with ignoreDuplicates: true
+    expect(gateway.upsertIgnoreDuplicates['sessions'], isTrue);
+    expect(gateway.upsertIgnoreDuplicates['events'], isTrue);
+    expect(gateway.upsertIgnoreDuplicates['reminder_events'], isTrue);
+
     // Every trial column travels, with the patient id attached.
     final trial = gateway.rowsFor('events').single;
     expect(trial['id'], 'tri-1');
@@ -123,6 +130,9 @@ void main() {
     final session = gateway.rowsFor('sessions').single;
     expect(session['id'], 'ses-1');
     expect(session['patient_id'], 'pat-1');
+    expect(session['started_at'], 1757199000000);
+    expect(session['ended_at'], 1757199100000);
+    expect(session['completed'], isTrue);
     expect(session['game_ids'], 'market_basket');
     expect(session['demo_replays'], 0);
 

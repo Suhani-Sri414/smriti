@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 
 import '../../core/ability/estimator.dart';
+import '../../core/progression/game_level_profiles.dart';
+import '../../core/progression/level_scale.dart';
 import '../cognitive_game.dart';
 import '../ghost_hand.dart';
 
@@ -49,12 +51,26 @@ class MarketBasketGame implements CognitiveGame {
   }
 
   /// List length for a given difficulty, held to a humane range.
-  static int listLengthFor(double difficulty) =>
-      (3 + difficulty.round()).clamp(2, 6);
+  static int listLengthFor(double difficulty) {
+    final effectiveLevel = difficulty > 2.5
+        ? difficulty
+        : LevelScale.difficultyToLevel(difficulty);
+    final params = GameLevelProfiles.marketBasket.paramsAt(effectiveLevel);
+    return (params['targetCount'] ?? (3 + difficulty.round()))
+        .toInt()
+        .clamp(2, 6);
+  }
 
   /// Extra same-category items on the shelf, which are the hard distractors.
-  static int nearDistractorsFor(double difficulty) =>
-      (difficulty.round()).clamp(0, 3);
+  static int nearDistractorsFor(double difficulty) {
+    final effectiveLevel = difficulty > 2.5
+        ? difficulty
+        : LevelScale.difficultyToLevel(difficulty);
+    final params = GameLevelProfiles.marketBasket.paramsAt(effectiveLevel);
+    final poolSize = (params['poolSize'] ?? 4).toInt();
+    final targetCount = (params['targetCount'] ?? 2).toInt();
+    return (poolSize - targetCount - 2).clamp(0, 3);
+  }
 
   @override
   GameItem generateItem(double difficulty, GameContent content) {

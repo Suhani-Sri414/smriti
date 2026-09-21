@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../core/ability/estimator.dart';
+import '../../core/progression/game_level_profiles.dart';
+import '../../core/progression/level_scale.dart';
 import '../cognitive_game.dart';
 import '../ghost_hand.dart';
 
@@ -149,29 +151,41 @@ class FacesOfMyFamilyGame implements CognitiveGame {
 
   @override
   GameItem generateItem(double difficulty, GameContent content) {
+    // Determine effective level and parameters from profile
+    final effectiveLevel = difficulty > 2.5
+        ? difficulty
+        : LevelScale.difficultyToLevel(difficulty);
+    final params =
+        GameLevelProfiles.forGame('faces_of_my_family').paramsAt(effectiveLevel);
+    final int maxAllowed = min(4, people.length).toInt();
+    final int candidateCount =
+        (params['candidateCount'] ?? 3.0).toInt().clamp(2, maxAllowed);
+    final int numDistractors = candidateCount - 1;
+    final distractorSimilarity = params['distractorSimilarity'] ?? 0.0;
+
     // Pick target person
     final targetIndex = _random.nextInt(people.length);
     final target = people[targetIndex];
 
-    // Pick 2 distractors based on difficulty:
+    // Pick distractors based on difficulty:
     // Higher difficulty -> distractors share generation or gender (harder semantic discrimination)
     // Lower difficulty -> distractors are clearly distinct
     final candidatePool =
         people.where((p) => p.id != target.id).toList()..shuffle(_random);
 
     List<FamilyPerson> distractors;
-    if (difficulty >= 0.5) {
+    if (distractorSimilarity >= 0.4 || difficulty >= 0.5) {
       final closeMatches = candidatePool
           .where((p) =>
               p.generation == target.generation || p.gender == target.gender)
           .toList();
-      if (closeMatches.length >= 2) {
-        distractors = closeMatches.take(2).toList();
+      if (closeMatches.length >= numDistractors) {
+        distractors = closeMatches.take(numDistractors).toList();
       } else {
-        distractors = candidatePool.take(2).toList();
+        distractors = candidatePool.take(numDistractors).toList();
       }
     } else {
-      distractors = candidatePool.take(2).toList();
+      distractors = candidatePool.take(numDistractors).toList();
     }
 
     final options = [target, ...distractors]..shuffle(_random);
@@ -184,6 +198,8 @@ class FacesOfMyFamilyGame implements CognitiveGame {
         'targetName': target.name,
         'targetRelationship': target.relationship,
         'distractorIds': distractors.map((d) => d.id).toList(),
+        'effectiveLevel': effectiveLevel,
+        'candidateCount': candidateCount,
       },
       payload: {
         'target': target,

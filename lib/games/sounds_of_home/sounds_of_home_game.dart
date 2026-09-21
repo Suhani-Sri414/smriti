@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../core/ability/estimator.dart';
+import '../../core/progression/game_level_profiles.dart';
+import '../../core/progression/level_scale.dart';
 import '../cognitive_game.dart';
 import '../ghost_hand.dart';
 
@@ -142,6 +144,14 @@ class SoundsOfHomeGame implements CognitiveGame {
 
   @override
   GameItem generateItem(double difficulty, GameContent content) {
+    // Determine effective level and parameters from profile
+    final effectiveLevel = difficulty > 2.5
+        ? difficulty
+        : LevelScale.difficultyToLevel(difficulty);
+    final params =
+        GameLevelProfiles.forGame('sounds_of_home').paramsAt(effectiveLevel);
+    final distractorSimilarity = params['distractorSimilarity'] ?? 0.0;
+
     // Pick target sound
     final targetIndex = _random.nextInt(sounds.length);
     final target = sounds[targetIndex];
@@ -150,7 +160,7 @@ class SoundsOfHomeGame implements CognitiveGame {
         sounds.where((s) => s.id != target.id).toList()..shuffle(_random);
 
     List<HomeSound> distractors;
-    if (difficulty >= 0.5) {
+    if (distractorSimilarity >= 0.4 || difficulty >= 0.5) {
       final sameCategory =
           candidatePool.where((s) => s.category == target.category).toList();
       if (sameCategory.isNotEmpty) {
@@ -182,6 +192,7 @@ class SoundsOfHomeGame implements CognitiveGame {
         'targetLabel': target.label,
         'category': target.category,
         'distractorIds': distractors.map((d) => d.id).toList(),
+        'effectiveLevel': effectiveLevel,
       },
       payload: {
         'target': target,

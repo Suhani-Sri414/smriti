@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../core/ability/estimator.dart';
+import '../../core/progression/game_level_profiles.dart';
+import '../../core/progression/level_scale.dart';
 import '../cognitive_game.dart';
 import '../ghost_hand.dart';
 
@@ -153,9 +155,19 @@ class SortTheHarvestGame implements CognitiveGame {
 
   @override
   GameItem generateItem(double difficulty, GameContent content) {
-    // Shift rule after 3-5 consecutive correct trials
-    final shiftThreshold = (4 - (difficulty.round() % 2)).clamp(3, 5);
-    if (_consecutiveCorrect >= shiftThreshold) {
+    // Determine effective level and parameters from profile
+    final effectiveLevel = difficulty > 2.5
+        ? difficulty
+        : LevelScale.difficultyToLevel(difficulty);
+    final params =
+        GameLevelProfiles.forGame('sort_the_harvest').paramsAt(effectiveLevel);
+    final categoryCount =
+        (params['categoryCount'] ?? 3.0).toInt().clamp(2, 3);
+    final ruleShiftFrequency =
+        (params['ruleShiftFrequency'] ?? 4.0).toInt().clamp(3, 5);
+
+    // Shift rule after ruleShiftFrequency consecutive correct trials
+    if (_consecutiveCorrect >= ruleShiftFrequency) {
       _previousRule = _currentRule;
       _currentRule = _currentRule == 'category' ? 'color' : 'category';
       _consecutiveCorrect = 0;
@@ -166,9 +178,9 @@ class SortTheHarvestGame implements CognitiveGame {
     final crop = defaultCrops[_random.nextInt(defaultCrops.length)];
 
     // Generate trays
-    final List<SortTray> trays;
+    final List<SortTray> allTrays;
     if (_currentRule == 'category') {
-      trays = const [
+      allTrays = const [
         SortTray(
           id: 'tray_vegetable',
           label: 'Vegetables',
@@ -192,7 +204,7 @@ class SortTheHarvestGame implements CognitiveGame {
         ),
       ];
     } else {
-      trays = const [
+      allTrays = const [
         SortTray(
           id: 'tray_green',
           label: 'Green',
@@ -217,12 +229,22 @@ class SortTheHarvestGame implements CognitiveGame {
       ];
     }
 
-    final targetTray = trays.firstWhere(
+    final targetTray = allTrays.firstWhere(
       (t) => _currentRule == 'category'
           ? t.ruleValue == crop.category
           : t.ruleValue == crop.colorName,
-      orElse: () => trays.first,
+      orElse: () => allTrays.first,
     );
+
+    // If categoryCount == 2, select targetTray and 1 distractor tray
+    List<SortTray> trays;
+    if (categoryCount < allTrays.length) {
+      final others =
+          allTrays.where((t) => t.id != targetTray.id).toList()..shuffle(_random);
+      trays = [targetTray, others.first]..shuffle(_random);
+    } else {
+      trays = allTrays;
+    }
 
     return GameItem(
       id: '${_currentRule}_${crop.id}',
@@ -235,6 +257,8 @@ class SortTheHarvestGame implements CognitiveGame {
         'cropColor': crop.colorName,
         'targetTrayId': targetTray.id,
         'previousRule': _previousRule,
+        'effectiveLevel': effectiveLevel,
+        'categoryCount': categoryCount,
       },
       payload: {
         'crop': crop,

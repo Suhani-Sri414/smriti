@@ -6,6 +6,7 @@ import '../core/reminders/health_check.dart';
 import 'diagnostics/caregiver_pin_dialog.dart';
 import 'diagnostics/diagnostics_screen.dart';
 import 'reminder_screen.dart';
+import '../ui/debug/progression_debug_screen.dart';
 
 /// Caregiver-facing debug panel, reached by long-pressing the home title.
 ///
@@ -114,6 +115,22 @@ class _DebugSheetState extends State<DebugSheet> {
               },
               icon: const Icon(Icons.settings_suggest_rounded, size: 18),
               label: const Text('Full Diagnostics Screen (PIN)'),
+            ),
+            const SizedBox(height: 8),
+
+            OutlinedButton.icon(
+              key: const Key('debug_open_progression'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ProgressionDebugScreen(services: widget.services),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.psychology_outlined, size: 18),
+              label: const Text('Progression & Fatigue Engine Debugger'),
             ),
             const SizedBox(height: 8),
 

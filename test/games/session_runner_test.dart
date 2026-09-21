@@ -416,4 +416,18 @@ void main() {
     // Everything the sync layer needs is queued.
     expect(await eventRepo.unsyncedSessions(), hasLength(1));
   });
+
+  test('runner.end() without arguments defaults to completed = true', () async {
+    final runner = newRunner();
+    final sessionId = await runner.start([game]);
+
+    clock = clock.add(const Duration(minutes: 2));
+    await runner.end();
+
+    final session = await eventRepo.getSession(sessionId);
+    expect(session, isNotNull);
+    expect(session!.completed, isTrue);
+    expect(session.endedAt, clock.millisecondsSinceEpoch);
+    expect(session.abandonedAtMs, isNull);
+  });
 }
