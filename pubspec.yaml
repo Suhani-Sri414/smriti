@@ -42,6 +42,7 @@ dependencies:
   uuid: ^4.3.3
   mobile_scanner: ^4.0.1
   just_audio: ^0.9.36
+  audio_session: ^0.1.25
   android_alarm_manager_plus: ^4.0.0
   flutter_local_notifications: ^17.0.0
   permission_handler: ^11.3.0

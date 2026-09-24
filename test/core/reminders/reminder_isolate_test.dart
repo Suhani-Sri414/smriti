@@ -31,6 +31,7 @@ void main() {
   late NoopReminderNotifier notifier;
   late RecordingVoice voice;
   late AlarmScheduler scheduler;
+  final List<Map<String, dynamic>> broadcastSent = [];
 
   /// Monday 8 September 2025, 08:20 — the dose time seeded below.
   var clock = DateTime(2025, 9, 8, 8, 20);
@@ -41,6 +42,7 @@ void main() {
     alarms = FakeAlarmApi();
     notifier = NoopReminderNotifier();
     voice = RecordingVoice();
+    broadcastSent.clear();
     clock = DateTime(2025, 9, 8, 8, 20);
     scheduler = AlarmScheduler(
       contentRepo: ContentRepo(db),
@@ -86,6 +88,21 @@ void main() {
       notifier: notifier,
       scheduler: scheduler,
       voice: voice,
+      broadcastSender: ({
+        required medicationId,
+        required reminderEventId,
+        required step,
+        required medicationName,
+        required medicationDose,
+      }) async {
+        broadcastSent.add({
+          'medicationId': medicationId,
+          'reminderEventId': reminderEventId,
+          'step': step,
+          'medicationName': medicationName,
+          'medicationDose': medicationDose,
+        });
+      },
       now: () => clock,
       // Skip path_provider, which has no plugin in a test host.
       resolvePath: (relative) async => '/docs/$relative',
@@ -116,7 +133,14 @@ void main() {
       expect(event.synced, isFalse);
 
       expect(notifier.shown, ['${event.id}:step0']);
-      expect(voice.played, ['/docs/medications/voice/med-1.m4a']);
+      // Voice playback is intentionally omitted in isolate to avoid dual playback
+      // and Android background muting (delegated to foreground ReminderScreen).
+      expect(voice.played, isEmpty);
+      // Explicit broadcast to ReminderReceiver is sent.
+      expect(broadcastSent, hasLength(1));
+      expect(broadcastSent.first['medicationId'], 'med-1');
+      expect(broadcastSent.first['reminderEventId'], event.id);
+      expect(broadcastSent.first['step'], 0);
 
       // Steps 1 and 2 armed at T+15m and T+30m.
       final ladder = alarms.scheduled
@@ -397,6 +421,50 @@ void main() {
       for (final alarm in alarms.scheduled) {
         expect(alarm.time.isAfter(clock), isTrue);
       }
+    });
+
+    test('purges previously tracked alarm IDs from AppConfigs and persists new ones (G7)', () async {
+      final schedulerWithConfigs = AlarmScheduler(
+        contentRepo: ContentRepo(db),
+        configsDao: db.appConfigsDao,
+        alarmApi: alarms,
+        now: () => clock,
+      );
+
+      // Pre-seed an orphaned alarm ID in AppConfigs that is no longer in medications
+      await db.appConfigsDao.setValue(
+        AlarmScheduler.trackedAlarmIdsKey,
+        '99991,99992',
+      );
+
+      await schedulerWithConfigs.rescheduleAll();
+
+      // Orphaned IDs must be cancelled
+      expect(alarms.cancelled, contains(99991));
+      expect(alarms.cancelled, contains(99992));
+
+      // New alarm IDs must be stored in AppConfigs
+      final storedIds =
+          await db.appConfigsDao.getValue(AlarmScheduler.trackedAlarmIdsKey);
+      expect(storedIds, isNotNull);
+      final idList = storedIds!.split(',').map(int.parse).toList();
+      expect(idList, hasLength(7));
+      for (final id in idList) {
+        expect(alarms.scheduled.any((a) => a.id == id), isTrue);
+      }
+    });
+
+    test('scheduleTestDoseAlarm schedules exact alarm for specified medication in the future', () async {
+      final fireAt = clock.add(const Duration(seconds: 20));
+      await scheduler.scheduleTestDoseAlarm(
+        medicationId: 'med-1',
+        fireAt: fireAt,
+      );
+
+      final testAlarm = alarms.scheduled.firstWhere(
+        (a) => a.medicationId == 'med-1' && a.step == 0 && a.time == fireAt,
+      );
+      expect(testAlarm.params['test'], isTrue);
     });
   });
 }

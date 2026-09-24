@@ -57,8 +57,11 @@ class AppServices {
 
     this.connectivityService = connectivityService ?? ConnectivityService();
 
-    this.alarmScheduler =
-        alarmScheduler ?? AlarmScheduler(contentRepo: contentRepo);
+    this.alarmScheduler = alarmScheduler ??
+        AlarmScheduler(
+          contentRepo: contentRepo,
+          configsDao: db.appConfigsDao,
+        );
     reminderNotifier = notifier ?? LocalReminderNotifier();
 
     this.pairingService = pairingService ??

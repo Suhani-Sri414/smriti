@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' show DartPluginRegistrant;
 
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:drift/drift.dart' show QueryExecutor, Value;
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
@@ -16,6 +17,14 @@ import '../voice/voice_player.dart';
 import 'alarm_scheduler.dart';
 import 'ladder.dart';
 import 'notifications.dart';
+
+typedef ReminderBroadcastSender = Future<void> Function({
+  required String medicationId,
+  required String reminderEventId,
+  required int step,
+  required String medicationName,
+  required String medicationDose,
+});
 
 /// Entry point AndroidAlarmManager calls when a dose is due.
 ///
@@ -39,8 +48,10 @@ Future<void> fireReminderCallback(int id, Map<String, dynamic> params) async {
     await ReminderFirer(
       db: db,
       notifier: notifier,
-      scheduler: AlarmScheduler(contentRepo: ContentRepo(db)),
-      voice: JustAudioVoicePlayer(),
+      scheduler: AlarmScheduler(
+        contentRepo: ContentRepo(db),
+        configsDao: db.appConfigsDao,
+      ),
     ).fire(params);
   } finally {
     // Leaving the connection open would hold a lock the main isolate needs.
@@ -64,12 +75,15 @@ class ReminderFirer {
     required this.db,
     required this.notifier,
     required this.scheduler,
-    required this.voice,
+    VoicePlayer? voice,
+    ReminderBroadcastSender? broadcastSender,
     Uuid? uuid,
     DateTime Function()? now,
     Future<String> Function(String relativePath)? resolvePath,
     Future<void> Function()? onEscalationQueued,
-  })  : _uuid = uuid ?? const Uuid(),
+  })  : voice = voice ?? const SilentVoicePlayer(),
+        _broadcastSender = broadcastSender ?? _defaultBroadcastSender,
+        _uuid = uuid ?? const Uuid(),
         _now = now ?? DateTime.now,
         _resolvePath = resolvePath ?? FilePaths.absolute,
         _onEscalationQueued = onEscalationQueued;
@@ -78,6 +92,33 @@ class ReminderFirer {
   final ReminderNotifier notifier;
   final AlarmScheduler scheduler;
   final VoicePlayer voice;
+  final ReminderBroadcastSender _broadcastSender;
+
+  static Future<void> _defaultBroadcastSender({
+    required String medicationId,
+    required String reminderEventId,
+    required int step,
+    required String medicationName,
+    required String medicationDose,
+  }) async {
+    if (Platform.isAndroid) {
+      try {
+        final intent = AndroidIntent(
+          action: 'com.example.smriti.ACTION_SHOW_REMINDER',
+          package: 'com.example.smriti',
+          componentName: 'com.example.smriti.ReminderReceiver',
+          arguments: <String, dynamic>{
+            'medicationId': medicationId,
+            'reminderEventId': reminderEventId,
+            'step': step,
+            'medicationName': medicationName,
+            'medicationDose': medicationDose,
+          },
+        );
+        await intent.sendBroadcast();
+      } catch (_) {}
+    }
+  }
 
   final Uuid _uuid;
   final DateTime Function() _now;
@@ -237,6 +278,16 @@ class ReminderFirer {
     String reminderEventId,
     int step,
   ) async {
+    // 1. Explicit broadcast to ReminderReceiver to launch ReminderActivity
+    await _broadcastSender(
+      medicationId: medication.id,
+      reminderEventId: reminderEventId,
+      step: step,
+      medicationName: medication.name,
+      medicationDose: medication.dose,
+    );
+
+    // 2. Full-screen intent notification fallback/system tray entry
     final photo = medication.pillPhotoPath;
     await notifier.showReminder(
       reminderEventId: reminderEventId,
@@ -245,14 +296,10 @@ class ReminderFirer {
       pillPhotoPath: photo == null ? null : await _resolvePath(photo),
     );
 
-    // The caregiver's own recorded voice, which is the part that actually
-    // works on someone with dementia.
-    final voicePath = medication.voicePath;
-    if (voicePath != null) {
-      try {
-        await voice.play(await _resolvePath(voicePath));
-      } catch (_) {}
-    }
+    // Note: Caregiver voice memo autoplay is handled by the foreground
+    // ReminderScreen/ReminderActivity with USAGE_ALARM (G3).
+    // Audio playback in this background isolate is omitted to prevent
+    // dual playback and OS background muting.
   }
 }
 

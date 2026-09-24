@@ -2,12 +2,16 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 import '../app_colors.dart';
 import '../core/app_services.dart';
 import '../core/db/database.dart';
 import '../core/voice/voice_player.dart';
+
+/// Type alias for full-screen reminder presentations.
+typedef FullScreenReminderScreen = ReminderScreen;
 
 /// Screen 14: Medicine Reminder.
 ///
@@ -145,7 +149,13 @@ class _ReminderScreenState extends State<ReminderScreen> {
       );
     }
 
-    if (mounted) Navigator.of(context).pop(outcome);
+    if (mounted) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(outcome);
+      } else {
+        SystemNavigator.pop();
+      }
+    }
   }
 
   static String _formatMinutes(int minutes) {

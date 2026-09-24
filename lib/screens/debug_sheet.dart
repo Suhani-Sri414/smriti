@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../core/app_services.dart';
 import '../core/db/database.dart';
+import '../core/reminders/alarm_scheduler.dart';
 import '../core/reminders/health_check.dart';
 import 'diagnostics/caregiver_pin_dialog.dart';
 import 'diagnostics/diagnostics_screen.dart';
@@ -70,6 +72,33 @@ class _DebugSheetState extends State<DebugSheet> {
     );
   }
 
+  /// Schedules a test reminder using the full alarm and broadcast pipeline in 20 seconds.
+  /// Allows locking the physical Android device to verify wake-up, keyguard dismissal, and FSI.
+  Future<void> _fireTestReminder20s() async {
+    final medications = await widget.services.contentRepo.getMedications();
+    Medication? med;
+    if (medications.isNotEmpty) {
+      med = medications.firstWhere((m) => m.active, orElse: () => medications.first);
+    }
+    if (med == null) {
+      setState(() => _status = 'No medications found — pull content first.');
+      return;
+    }
+
+    final fireAt = DateTime.now().add(const Duration(seconds: 20));
+    await widget.services.alarmScheduler.scheduleTestDoseAlarm(
+      medicationId: med.id,
+      fireAt: fireAt,
+    );
+
+    if (mounted) {
+      setState(() {
+        _status = 'Test reminder armed for "${med!.name}" in 20s. '
+            'Lock your screen now to test wake-up!';
+      });
+    }
+  }
+
   SetupHealthCheck get _healthCheck => SetupHealthCheck(
         configs: widget.services.db.appConfigsDao,
         scheduler: widget.services.alarmScheduler,
@@ -91,10 +120,22 @@ class _DebugSheetState extends State<DebugSheet> {
             ),
             const SizedBox(height: 12),
 
+            ElevatedButton.icon(
+              key: const Key('debug_fire_test_reminder_20s'),
+              onPressed: _busy ? null : _fireTestReminder20s,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.terracotta,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.alarm_on_rounded, size: 20),
+              label: const Text('Fire test reminder in 20s (Lock screen to test)'),
+            ),
+            const SizedBox(height: 8),
+
             ElevatedButton(
               key: const Key('debug_fire_test_reminder'),
               onPressed: _busy ? null : _fireTestReminder,
-              child: const Text('Fire test reminder now'),
+              child: const Text('Fire test reminder now (in-memory)'),
             ),
             const SizedBox(height: 8),
 

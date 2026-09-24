@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 /// Plays a caregiver's pre-recorded voice file from disk.
@@ -18,7 +20,25 @@ abstract class VoicePlayer {
 }
 
 class JustAudioVoicePlayer implements VoicePlayer {
+  JustAudioVoicePlayer() {
+    _initAudioAttributes();
+  }
+
   final AudioPlayer _player = AudioPlayer();
+
+  Future<void> _initAudioAttributes() async {
+    try {
+      await _player.setAndroidAudioAttributes(
+        const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          usage: AndroidAudioUsage.alarm,
+          flags: AndroidAudioFlags.audibilityEnforced,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[JustAudioVoicePlayer] Failed to set android audio attributes: $e');
+    }
+  }
 
   @override
   Future<void> play(String path) async {

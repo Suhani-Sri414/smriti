@@ -1,5 +1,6 @@
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
+import '../db/dao/app_configs_dao.dart';
 import '../repo/content_repo.dart';
 import 'ladder.dart';
 import 'reminder_isolate.dart';
@@ -29,8 +30,9 @@ class AndroidAlarmApi implements AlarmApi {
 
   /// Every flag from APP-BUILD-SPEC.md §10 matters:
   /// `exact` so the dose is on time, `wakeup` so a sleeping device still
-  /// fires, `allowWhileIdle` to survive Doze, and `rescheduleOnReboot` so a
-  /// restart does not silently drop every future dose.
+  /// fires, `alarmClock` to exempt from Doze mode (G6), `allowWhileIdle` to
+  /// survive Doze, and `rescheduleOnReboot` so a restart does not silently
+  /// drop every future dose.
   @override
   Future<bool> oneShotAt(
     DateTime time,
@@ -44,6 +46,7 @@ class AndroidAlarmApi implements AlarmApi {
       callback,
       exact: true,
       wakeup: true,
+      alarmClock: true,
       allowWhileIdle: true,
       rescheduleOnReboot: true,
       params: params,
@@ -58,14 +61,18 @@ class AndroidAlarmApi implements AlarmApi {
 class AlarmScheduler {
   AlarmScheduler({
     required this.contentRepo,
+    this.configsDao,
     AlarmApi alarmApi = const AndroidAlarmApi(),
     DateTime Function()? now,
   })  : _alarms = alarmApi,
         _now = now ?? DateTime.now;
 
   final ContentRepo contentRepo;
+  final AppConfigsDao? configsDao;
   final AlarmApi _alarms;
   final DateTime Function() _now;
+
+  static const String trackedAlarmIdsKey = 'scheduled_alarm_ids';
 
   /// How many alarms the last [rescheduleAll] scheduled. Surfaced for the
   /// diagnostics screen.
@@ -80,6 +87,20 @@ class AlarmScheduler {
   /// deactivated must stop firing entirely. Called as the last step of a
   /// content pull, because medication times may have changed.
   Future<void> rescheduleAll() async {
+    // 1. Purge previously tracked alarm IDs from AppConfigs to prevent orphaned alarms (G7).
+    if (configsDao != null) {
+      final raw = await configsDao!.getValue(trackedAlarmIdsKey);
+      if (raw != null && raw.isNotEmpty) {
+        final oldIds = raw
+            .split(',')
+            .map((s) => int.tryParse(s.trim()))
+            .whereType<int>();
+        for (final id in oldIds) {
+          await _alarms.cancel(id);
+        }
+      }
+    }
+
     // Every medication, not just active ones — a medication deactivated by the
     // last pull still has alarms out there that must be cancelled.
     final all = await contentRepo.getMedications(activeOnly: false);
@@ -89,17 +110,19 @@ class AlarmScheduler {
       }
     }
 
+    final newAlarmIds = <int>[];
     var scheduled = 0;
     final from = _now();
     for (final medication in all.where((m) => m.active)) {
       for (final day in ReminderLadder.parseDays(medication.daysOfWeek)) {
+        final alarmId = ReminderLadder.doseAlarmId(medication.id, day);
         await _alarms.oneShotAt(
           ReminderLadder.nextOccurrence(
             dayOfWeek: day,
             minutesFromMidnight: medication.chosenTimeMin,
             from: from,
           ),
-          ReminderLadder.doseAlarmId(medication.id, day),
+          alarmId,
           fireReminderCallback,
           params: {
             'medicationId': medication.id,
@@ -107,8 +130,14 @@ class AlarmScheduler {
             'step': ReminderLadder.stepInitial,
           },
         );
+        newAlarmIds.add(alarmId);
         scheduled++;
       }
+    }
+
+    // 2. Persist new tracked IDs in AppConfigs (G7).
+    if (configsDao != null) {
+      await configsDao!.setValue(trackedAlarmIdsKey, newAlarmIds.join(','));
     }
 
     lastScheduledAlarmCount = scheduled;
@@ -182,6 +211,30 @@ extension TestAlarmScheduling on AlarmScheduler {
       ReminderLadder.stableHash('smriti_health_check_alarm') & 0x00FFFFFF,
       fireTestAlarmCallback,
       params: const {'step': ReminderLadder.stepInitial, 'test': true},
+    );
+  }
+
+  /// Arms a test dose reminder for physical device verification (e.g. in 20 seconds).
+  ///
+  /// Uses the exact same [fireReminderCallback] pipeline with [alarmClock: true]
+  /// so that when the device is locked and Doze is active, the system wakes up,
+  /// fires the broadcast, and displays [ReminderActivity] over keyguard.
+  Future<void> scheduleTestDoseAlarm({
+    required String medicationId,
+    required DateTime fireAt,
+  }) async {
+    final testAlarmId =
+        ReminderLadder.stableHash('smriti_test_dose_alarm') & 0x00FFFFFF;
+    await _alarms.cancel(testAlarmId);
+    await _alarms.oneShotAt(
+      fireAt,
+      testAlarmId,
+      fireReminderCallback,
+      params: {
+        'medicationId': medicationId,
+        'step': ReminderLadder.stepInitial,
+        'test': true,
+      },
     );
   }
 }

@@ -57,8 +57,8 @@ class LocalReminderNotifier implements ReminderNotifier {
 
   /// Separate channels so step 1 can be louder without re-creating a channel —
   /// Android ignores importance changes to an existing channel.
-  static const String channelId = 'smriti_reminders';
-  static const String loudChannelId = 'smriti_reminders_loud';
+  static const String channelId = 'medication_reminder_v2';
+  static const String loudChannelId = 'medication_reminder_v2_loud';
 
   @override
   Future<void> initialize() async {
